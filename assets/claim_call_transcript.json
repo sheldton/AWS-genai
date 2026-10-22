@@ -1,0 +1,7 @@
+{
+ "text": "Hi, my name is [PII]. I'm calling about my home insurance. The policy number is AC 77812H. On the 4th of March, a big branch came down in the storm and smashed our living room window. My phone number is [PII]. The repair will be around $1100. Thank you.",
+ "seconds": 3.2,
+ "min_confidence": 0.96,
+ "words": 49,
+ "job": "mlaidp-m02-call-1792425913"
+}

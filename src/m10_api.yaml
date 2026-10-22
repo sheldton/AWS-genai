@@ -1,0 +1,497 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  MLAIDP M10 - an enterprise GenAI API for AnyCompany Insurance. API Gateway (REST) with request validation, usage
+  plans per tenant and JSON gateway responses; sync POST /ask and async POST /jobs (202 + SQS + capped worker Lambda);
+  DynamoDB for jobs and per-tenant token usage; one application inference profile per tenant (cost-allocation tags);
+  a company guardrail; one ABAC role for direct model access, tested with STS session tags.
+
+Parameters:
+  BronzeModelSource:
+    Type: String
+    Default: us.amazon.nova-micro-v1:0
+  GoldModelSource:
+    Type: String
+    Default: us.amazon.nova-lite-v1:0
+
+Resources:
+  # ------------------------------------------------------------------ models: one application inference profile per tenant
+  BronzeProfile:
+    Type: AWS::Bedrock::ApplicationInferenceProfile
+    Properties:
+      InferenceProfileName: mlaidp2-m10-tenant-bronze
+      Description: Tenant bronze on Nova Micro
+      ModelSource: {CopyFrom: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${BronzeModelSource}"}
+      Tags: [{Key: Tenant, Value: bronze}, {Key: CostCenter, Value: CC-1001}, {Key: Project, Value: mlaidp2-demo}]
+  GoldProfile:
+    Type: AWS::Bedrock::ApplicationInferenceProfile
+    Properties:
+      InferenceProfileName: mlaidp2-m10-tenant-gold
+      Description: Tenant gold on Nova Lite
+      ModelSource: {CopyFrom: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${GoldModelSource}"}
+      Tags: [{Key: Tenant, Value: gold}, {Key: CostCenter, Value: CC-2002}, {Key: Project, Value: mlaidp2-demo}]
+
+  Guardrail:            # the company guardrail - prompt attacks and e-mail addresses (no contextual grounding)
+    Type: AWS::Bedrock::Guardrail
+    Properties:
+      Name: mlaidp2-m10-company-guardrail
+      BlockedInputMessaging: This request was blocked by the AnyCompany AI policy.
+      BlockedOutputsMessaging: This answer was blocked by the AnyCompany AI policy.
+      ContentPolicyConfig:
+        FiltersConfig: [{Type: PROMPT_ATTACK, InputStrength: HIGH, OutputStrength: NONE}]
+      SensitiveInformationPolicyConfig:
+        PiiEntitiesConfig: [{Type: EMAIL, Action: ANONYMIZE}]
+      Tags: [{Key: Project, Value: mlaidp2-demo}]
+  GuardrailV1:
+    Type: AWS::Bedrock::GuardrailVersion
+    Properties: {GuardrailIdentifier: !GetAtt Guardrail.GuardrailId, Description: v1}
+
+  # ------------------------------------------------------------------ state: jobs, per-tenant token usage, queue
+  Jobs:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: mlaidp2-m10-jobs
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions: [{AttributeName: job_id, AttributeType: S}]
+      KeySchema: [{AttributeName: job_id, KeyType: HASH}]
+      TimeToLiveSpecification: {AttributeName: expires_at, Enabled: true}
+      Tags: [{Key: Project, Value: mlaidp2-demo}]
+  Usage:                # tenant + day -> tokens (ADD), tenant + "budget" -> daily token budget override
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: mlaidp2-m10-usage
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions: [{AttributeName: tenant, AttributeType: S}, {AttributeName: day, AttributeType: S}]
+      KeySchema: [{AttributeName: tenant, KeyType: HASH}, {AttributeName: day, KeyType: RANGE}]
+      Tags: [{Key: Project, Value: mlaidp2-demo}]
+  DeadLetters:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: mlaidp2-m10-jobs-dlq
+      MessageRetentionPeriod: 86400
+      Tags: [{Key: Project, Value: mlaidp2-demo}]
+  Queue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: mlaidp2-m10-jobs
+      VisibilityTimeout: 20          # >= worker timeout; a failed message is retried after 20 s
+      RedrivePolicy: {deadLetterTargetArn: !GetAtt DeadLetters.Arn, maxReceiveCount: 2}
+      Tags: [{Key: Project, Value: mlaidp2-demo}]
+
+  # ------------------------------------------------------------------ compute: least-privilege role, two functions
+  FnRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: mlaidp2-m10-fn-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{Effect: Allow, Principal: {Service: lambda.amazonaws.com}, Action: sts:AssumeRole}]
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole]
+      Tags: [{Key: Project, Value: mlaidp2-demo}]
+      Policies:
+        - PolicyName: least-privilege
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: TenantProfilesOnly
+                Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: [!GetAtt BronzeProfile.InferenceProfileArn, !GetAtt GoldProfile.InferenceProfileArn]
+              - Sid: ModelsOnlyThroughTheTenantProfiles
+                Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: ["arn:aws:bedrock:*::foundation-model/amazon.nova-*", !Sub "arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/us.amazon.nova-*"]
+                Condition:
+                  StringEquals:
+                    bedrock:InferenceProfileArn: [!GetAtt BronzeProfile.InferenceProfileArn, !GetAtt GoldProfile.InferenceProfileArn]
+              - Effect: Allow
+                Action: bedrock:ApplyGuardrail
+                Resource: !GetAtt Guardrail.GuardrailArn
+              - Effect: Allow
+                Action: [dynamodb:PutItem, dynamodb:GetItem, dynamodb:UpdateItem]
+                Resource: [!GetAtt Jobs.Arn, !GetAtt Usage.Arn]
+              - Effect: Allow
+                Action: [sqs:SendMessage, sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes]
+                Resource: !GetAtt Queue.Arn
+
+  ApiLogs:              # owned by the stack, so a stack delete removes them (Lambda would create them, unowned)
+    Type: AWS::Logs::LogGroup
+    Properties: {LogGroupName: /aws/lambda/mlaidp2-m10-api, RetentionInDays: 1}
+  WorkerLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: {LogGroupName: /aws/lambda/mlaidp2-m10-worker, RetentionInDays: 1}
+
+  ApiFn:
+    Type: AWS::Lambda::Function
+    DependsOn: ApiLogs
+    Properties:
+      FunctionName: mlaidp2-m10-api
+      Runtime: python3.12
+      Architectures: [arm64]
+      Handler: index.handler
+      Timeout: 29
+      MemorySize: 256
+      Role: !GetAtt FnRole.Arn
+      Tags: [{Key: Project, Value: mlaidp2-demo}]
+      Environment:
+        Variables:
+          JOBS: !Ref Jobs
+          USAGE: !Ref Usage
+          QUEUE_URL: !Ref Queue
+          GUARDRAIL: !Sub "${Guardrail.GuardrailId}:${GuardrailV1.Version}"
+          TENANTS: !Sub >-
+            {"${BronzeKey}": {"tenant": "bronze", "profile": "${BronzeProfile.InferenceProfileArn}", "budget": 50000},
+             "${GoldKey}": {"tenant": "gold", "profile": "${GoldProfile.InferenceProfileArn}", "budget": 500000}}
+      Code:
+        ZipFile: |
+          import json, os, time, uuid, hashlib, datetime, boto3
+          from botocore.exceptions import ClientError
+          br, sqs, ddb = boto3.client("bedrock-runtime"), boto3.client("sqs"), boto3.resource("dynamodb")
+          jobs, usage = ddb.Table(os.environ["JOBS"]), ddb.Table(os.environ["USAGE"])
+          TENANTS = json.loads(os.environ["TENANTS"])            # API key id -> tenant, profile, default budget
+          gid, gver = os.environ["GUARDRAIL"].split(":")
+
+          def reply(code, body, **headers):
+              return {"statusCode": code, "headers": {"content-type": "application/json", **headers},
+                      "body": json.dumps(body, default=lambda d: int(d) if d == int(d) else float(d))}
+
+          def budget_left(t):
+              day = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+              used = usage.get_item(Key={"tenant": t["tenant"], "day": day}).get("Item", {}).get("tokens", 0)
+              cap = usage.get_item(Key={"tenant": t["tenant"], "day": "budget"}).get("Item", {}).get("tokens", t["budget"])
+              return int(cap) - int(used)
+
+          def record(tenant, u):                                  # the token ledger (a blocked input costs 0)
+              day = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+              usage.update_item(Key={"tenant": tenant, "day": day}, UpdateExpression="ADD tokens :t, input_tokens :i, output_tokens :o",
+                                ExpressionAttributeValues={":t": u["totalTokens"], ":i": u["inputTokens"], ":o": u["outputTokens"]})
+
+          def handler(event, context):
+              t = TENANTS.get(event["requestContext"]["identity"].get("apiKeyId"))
+              if not t:
+                  return reply(403, {"error": "unknown tenant"})
+              route, body = f'{event["httpMethod"]} {event["resource"]}', json.loads(event.get("body") or "{}")
+              if route.startswith("POST") and budget_left(t) <= 0:      # tier 2: tokens, not requests
+                  now = datetime.datetime.now(datetime.timezone.utc)
+                  return reply(429, {"error": "daily token budget exhausted", "tenant": t["tenant"]},
+                               **{"Retry-After": str(86400 - now.hour * 3600 - now.minute * 60 - now.second)})
+              if route == "POST /ask":
+                  t0 = time.time()
+                  try:
+                      r = br.converse(modelId=t["profile"], messages=[{"role": "user", "content": [{"text": body["question"]}]}],
+                                      inferenceConfig={"maxTokens": body.get("max_tokens", 200), "temperature": 0},
+                                      guardrailConfig={"guardrailIdentifier": gid, "guardrailVersion": gver})
+                  except ClientError as e:
+                      code = e.response["Error"]["Code"]
+                      if code == "ThrottlingException":
+                          return reply(429, {"error": "model busy, retry"}, **{"Retry-After": "2"})
+                      return reply(400 if code == "ValidationException" else 502, {"error": code})
+                  record(t["tenant"], r["usage"])
+                  return reply(200, {"tenant": t["tenant"], "answer": r["output"]["message"]["content"][0]["text"],
+                                     "stop_reason": r["stopReason"], "tokens": r["usage"]["totalTokens"],
+                                     "model_ms": int((time.time() - t0) * 1000)})
+              if route == "POST /jobs":
+                  key = {k.lower(): v for k, v in (event.get("headers") or {}).items()}.get("idempotency-key")
+                  job = "J-" + (hashlib.sha256(f'{t["tenant"]}|{key}'.encode()).hexdigest()[:12] if key else uuid.uuid4().hex[:12])
+                  try:                                                 # a retried POST with the same key = same job
+                      jobs.put_item(Item={"job_id": job, "tenant": t["tenant"], "status": "QUEUED", "question": body["question"],
+                                          "max_tokens": body.get("max_tokens", 200), "queued_ms": int(time.time() * 1000),
+                                          "expires_at": int(time.time()) + 7 * 86400}, ConditionExpression="attribute_not_exists(job_id)")
+                  except ClientError as e:
+                      if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+                          raise
+                      return reply(202, {"job_id": job, "replayed": True}, Location=f"/jobs/{job}")
+                  sqs.send_message(QueueUrl=os.environ["QUEUE_URL"], MessageGroupId=t["tenant"],   # fair queue per tenant
+                                   MessageBody=json.dumps({"job_id": job}))
+                  return reply(202, {"job_id": job, "replayed": False}, Location=f"/jobs/{job}")
+              if route == "GET /jobs/{id}":
+                  item = jobs.get_item(Key={"job_id": event["pathParameters"]["id"]}).get("Item")
+                  if not item or item["tenant"] != t["tenant"]:        # another tenant's job does not exist for you
+                      return reply(404, {"error": "no such job"})
+                  return reply(200, item)
+              return reply(404, {"error": "no route"})
+
+  WorkerFn:
+    Type: AWS::Lambda::Function
+    DependsOn: WorkerLogs
+    Properties:
+      FunctionName: mlaidp2-m10-worker
+      Runtime: python3.12
+      Architectures: [arm64]
+      Handler: index.handler
+      Timeout: 15
+      MemorySize: 256
+      Role: !GetAtt FnRole.Arn
+      Tags: [{Key: Project, Value: mlaidp2-demo}]
+      Environment:
+        Variables:
+          JOBS: !Ref Jobs
+          USAGE: !Ref Usage
+          GUARDRAIL: !Sub "${Guardrail.GuardrailId}:${GuardrailV1.Version}"
+          PROFILES: !Sub '{"bronze": "${BronzeProfile.InferenceProfileArn}", "gold": "${GoldProfile.InferenceProfileArn}"}'
+      Code:
+        ZipFile: |
+          import json, os, time, datetime, boto3
+          from botocore.exceptions import ClientError
+          br, ddb = boto3.client("bedrock-runtime"), boto3.resource("dynamodb")
+          jobs, usage = ddb.Table(os.environ["JOBS"]), ddb.Table(os.environ["USAGE"])
+          PROFILES = json.loads(os.environ["PROFILES"])
+          gid, gver = os.environ["GUARDRAIL"].split(":")
+          RETRYABLE = {"ThrottlingException", "ServiceUnavailableException", "InternalServerException",
+                       "ModelNotReadyException", "ModelTimeoutException"}
+
+          def process(rec):
+              job = jobs.get_item(Key={"job_id": json.loads(rec["body"])["job_id"]})["Item"]   # poison -> KeyError
+              if job["status"] == "DONE":                  # SQS is at-least-once: a duplicate delivery is a no-op
+                  return
+              t0 = time.time()
+              try:
+                  r = br.converse(modelId=PROFILES[job["tenant"]],
+                                  messages=[{"role": "user", "content": [{"text": job["question"]}]}],
+                                  inferenceConfig={"maxTokens": int(job["max_tokens"]), "temperature": 0.3},
+                                  guardrailConfig={"guardrailIdentifier": gid, "guardrailVersion": gver})
+              except ClientError as e:
+                  if e.response["Error"]["Code"] in RETRYABLE:
+                      raise                                 # transient: let SQS redeliver after the visibility timeout
+                  jobs.update_item(Key={"job_id": job["job_id"]}, UpdateExpression="SET #s = :s, #e = :e",
+                                   ExpressionAttributeNames={"#s": "status", "#e": "error"},
+                                   ExpressionAttributeValues={":s": "FAILED", ":e": e.response["Error"]["Code"]})
+                  return                                    # our bug: retrying will not help
+              u, day = r["usage"], datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+              usage.update_item(Key={"tenant": job["tenant"], "day": day}, UpdateExpression="ADD tokens :t, input_tokens :i, output_tokens :o",
+                                ExpressionAttributeValues={":t": u["totalTokens"], ":i": u["inputTokens"], ":o": u["outputTokens"]})
+              jobs.update_item(Key={"job_id": job["job_id"]},
+                               UpdateExpression="SET #s = :s, answer = :a, tokens = :t, model_ms = :m, done_ms = :d, receives = :r",
+                               ExpressionAttributeNames={"#s": "status"},
+                               ExpressionAttributeValues={":s": "DONE", ":a": r["output"]["message"]["content"][0]["text"],
+                                                          ":t": u["totalTokens"], ":m": int((time.time() - t0) * 1000),
+                                                          ":d": int(time.time() * 1000),
+                                                          ":r": int(rec["attributes"]["ApproximateReceiveCount"])})
+
+          def handler(event, context):
+              failures = []
+              for rec in event["Records"]:
+                  try:
+                      process(rec)
+                  except Exception as e:
+                      print(json.dumps({"failed": rec["messageId"], "error": repr(e)[:200]}))
+                      failures.append({"itemIdentifier": rec["messageId"]})
+              return {"batchItemFailures": failures}
+
+  WorkerMapping:        # tier 3: the concurrency YOU choose, below the model quota
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt Queue.Arn
+      FunctionName: !Ref WorkerFn
+      BatchSize: 1
+      FunctionResponseTypes: [ReportBatchItemFailures]
+      ScalingConfig: {MaximumConcurrency: 2}
+
+  # ------------------------------------------------------------------ the front door
+  Api:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: mlaidp2-m10-claims-ai-api
+      ApiKeySourceType: HEADER
+      EndpointConfiguration: {Types: [REGIONAL]}
+      Tags: [{Key: Project, Value: mlaidp2-demo}]
+  BodyValidator:
+    Type: AWS::ApiGateway::RequestValidator
+    Properties: {RestApiId: !Ref Api, Name: body-only, ValidateRequestBody: true, ValidateRequestParameters: false}
+  QuestionModel:        # checkpoint 2 (validation) - rejected before any code or model runs
+    Type: AWS::ApiGateway::Model
+    Properties:
+      RestApiId: !Ref Api
+      Name: Question
+      ContentType: application/json
+      Schema:
+        $schema: http://json-schema.org/draft-04/schema#
+        type: object
+        required: [question]
+        additionalProperties: false
+        properties:
+          question: {type: string, minLength: 3, maxLength: 2000}
+          max_tokens: {type: integer, minimum: 1, maximum: 400}
+
+  AskRes:
+    Type: AWS::ApiGateway::Resource
+    Properties: {RestApiId: !Ref Api, ParentId: !GetAtt Api.RootResourceId, PathPart: ask}
+  JobsRes:
+    Type: AWS::ApiGateway::Resource
+    Properties: {RestApiId: !Ref Api, ParentId: !GetAtt Api.RootResourceId, PathPart: jobs}
+  JobRes:
+    Type: AWS::ApiGateway::Resource
+    Properties: {RestApiId: !Ref Api, ParentId: !Ref JobsRes, PathPart: "{id}"}
+  AskPost:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref AskRes
+      HttpMethod: POST
+      AuthorizationType: NONE
+      ApiKeyRequired: true
+      RequestValidatorId: !Ref BodyValidator
+      RequestModels: {application/json: !Ref QuestionModel}
+      Integration: {Type: AWS_PROXY, IntegrationHttpMethod: POST, Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiFn.Arn}/invocations"}
+  JobsPost:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref JobsRes
+      HttpMethod: POST
+      AuthorizationType: NONE
+      ApiKeyRequired: true
+      RequestValidatorId: !Ref BodyValidator
+      RequestModels: {application/json: !Ref QuestionModel}
+      Integration: {Type: AWS_PROXY, IntegrationHttpMethod: POST, Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiFn.Arn}/invocations"}
+  JobGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref JobRes
+      HttpMethod: GET
+      AuthorizationType: NONE
+      ApiKeyRequired: true
+      Integration: {Type: AWS_PROXY, IntegrationHttpMethod: POST, Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiFn.Arn}/invocations"}
+  InvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApiFn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*
+
+  # JSON errors a client can act on: Retry-After on 429, the schema violation on 400
+  ThrottledResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref Api
+      ResponseType: THROTTLED
+      StatusCode: "429"
+      ResponseParameters: {gatewayresponse.header.Retry-After: "'1'"}
+      ResponseTemplates: {application/json: '{"error": "rate limit of your usage plan", "request_id": "$context.requestId"}'}
+  QuotaResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref Api
+      ResponseType: QUOTA_EXCEEDED
+      StatusCode: "429"
+      ResponseParameters: {gatewayresponse.header.Retry-After: "'3600'"}
+      ResponseTemplates: {application/json: '{"error": "daily request quota of your usage plan exhausted"}'}
+  BadBodyResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref Api
+      ResponseType: BAD_REQUEST_BODY
+      StatusCode: "400"
+      ResponseTemplates: {application/json: '{"error": "$context.error.validationErrorString"}'}
+
+  Deployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: [AskPost, JobsPost, JobGet, ThrottledResponse, QuotaResponse, BadBodyResponse]
+    Properties: {RestApiId: !Ref Api}
+  Stage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref Api
+      DeploymentId: !Ref Deployment
+      StageName: v1
+      Tags: [{Key: Project, Value: mlaidp2-demo}]
+
+  # tier 1: requests per tenant - token bucket (rate = refill, burst = bucket size) + daily quota
+  BronzePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn: Stage
+    Properties:
+      UsagePlanName: mlaidp2-m10-bronze
+      Description: Bronze tenant - 1 request per second, burst 2, 2000 per day
+      ApiStages: [{ApiId: !Ref Api, Stage: v1}]
+      Throttle: {RateLimit: 1, BurstLimit: 2}
+      Quota: {Limit: 2000, Period: DAY}
+      Tags: [{Key: Project, Value: mlaidp2-demo}]
+  GoldPlan:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn: Stage
+    Properties:
+      UsagePlanName: mlaidp2-m10-gold
+      Description: Gold tenant - 20 requests per second, burst 40, 20000 per day
+      ApiStages: [{ApiId: !Ref Api, Stage: v1}]
+      Throttle: {RateLimit: 20, BurstLimit: 40}
+      Quota: {Limit: 20000, Period: DAY}
+      Tags: [{Key: Project, Value: mlaidp2-demo}]
+  BronzeKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties: {Name: mlaidp2-m10-tenant-bronze, Enabled: true, Tags: [{Key: Tenant, Value: bronze}]}
+  GoldKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties: {Name: mlaidp2-m10-tenant-gold, Enabled: true, Tags: [{Key: Tenant, Value: gold}]}
+  BronzeLink:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties: {KeyId: !Ref BronzeKey, KeyType: API_KEY, UsagePlanId: !Ref BronzePlan}
+  GoldLink:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties: {KeyId: !Ref GoldKey, KeyType: API_KEY, UsagePlanId: !Ref GoldPlan}
+
+  # ------------------------------------------------------------------ ABAC: ONE role for every tenant's developers
+  TenantConsumerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: mlaidp2-m10-tenant-consumer
+      Description: MLAIDP M10 - one ABAC role, the session tag Tenant decides which profile it may use
+      Tags: [{Key: Project, Value: mlaidp2-demo}]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: SessionsMustCarryATenantTag     # in production: IAM Identity Center attributes for access control
+            Effect: Allow
+            Principal: {AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"}
+            Action: [sts:AssumeRole, sts:TagSession]
+            Condition: {"Null": {"aws:RequestTag/Tenant": "false"}}
+      Policies:
+        - PolicyName: abac-models
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: OwnTenantProfileOnly
+                Effect: Allow
+                Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
+                Resource: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:application-inference-profile/*"
+                Condition: {StringEquals: {"aws:ResourceTag/Tenant": "${aws:PrincipalTag/Tenant}"}}
+              - Sid: ModelOnlyThroughAnApplicationProfile
+                Effect: Allow
+                Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
+                Resource: ["arn:aws:bedrock:*::foundation-model/*", !Sub "arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*"]
+                Condition: {ArnLike: {bedrock:InferenceProfileArn: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:application-inference-profile/*"}}
+              - Sid: UseTheCompanyGuardrail
+                Effect: Allow
+                Action: bedrock:ApplyGuardrail
+                Resource: !GetAtt Guardrail.GuardrailArn
+              - Sid: LabelOwnProfile
+                Effect: Allow
+                Action: bedrock:TagResource
+                Resource: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:application-inference-profile/*"
+                Condition: {StringEquals: {"aws:ResourceTag/Tenant": "${aws:PrincipalTag/Tenant}"}}
+              - Sid: NeverTouchTheTagThatGrantsAccess
+                Effect: Deny
+                Action: [bedrock:TagResource, bedrock:UntagResource]
+                Resource: "*"
+                Condition: {ForAnyValue:StringEquals: {"aws:TagKeys": [Tenant]}}
+              - Sid: NoModelCallWithoutTheCompanyGuardrail
+                Effect: Deny
+                Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
+                Resource: "*"
+                Condition: {StringNotEquals: {bedrock:GuardrailIdentifier: !Sub "${Guardrail.GuardrailArn}:${GuardrailV1.Version}"}}
+
+Outputs:
+  Url: {Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/v1"}
+  ApiId: {Value: !Ref Api}
+  BronzeKeyId: {Value: !Ref BronzeKey}
+  GoldKeyId: {Value: !Ref GoldKey}
+  QueueUrl: {Value: !Ref Queue}
+  DlqUrl: {Value: !Ref DeadLetters}
+  JobsTable: {Value: !Ref Jobs}
+  UsageTable: {Value: !Ref Usage}
+  BronzeProfileArn: {Value: !GetAtt BronzeProfile.InferenceProfileArn}
+  GoldProfileArn: {Value: !GetAtt GoldProfile.InferenceProfileArn}
+  GuardrailArn: {Value: !GetAtt Guardrail.GuardrailArn}
+  GuardrailVersion: {Value: !GetAtt GuardrailV1.Version}
+  ConsumerRoleArn: {Value: !GetAtt TenantConsumerRole.Arn}

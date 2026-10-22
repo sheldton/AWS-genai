@@ -1,0 +1,15 @@
+Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+
+Scope. The documentation in this repository is licensed under CC BY-SA 4.0: README.md, the DEMO_*.md guides and the
+markdown cells of the notebooks. Everything else (Python, shell, CloudFormation, data files and code cells) is licensed
+under MIT No Attribution (MIT-0); see LICENSE.
+
+You are free to share and adapt the licensed material for any purpose, even commercially, as long as you give
+appropriate credit, provide a link to the license, indicate if changes were made, and distribute your contributions
+under the same license.
+
+  License summary: https://creativecommons.org/licenses/by-sa/4.0/
+  Legal code:      https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+This is companion material for a course, not an official AWS training product. AnyCompany Insurance and all its
+customers, policies, claims and documents are fictional.

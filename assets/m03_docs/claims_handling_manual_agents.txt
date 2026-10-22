@@ -1,0 +1,28 @@
+AnyCompany Insurance - Claims Handling Manual for Contact Center Agents
+
+Internal guidance, version 4.2, valid from 1 March 2026. Use this manual together with the Home Policy Wording HP-2026.
+
+Status codes in the claims system
+
+Every claim carries one status code. Read the code to the customer in plain words, never as the code itself.
+
+- R1 - Registered. The claim has been recorded. No adjuster assigned yet.
+- R2 - Adjuster assigned. Tell the customer the adjuster will call within 2 business days.
+- R4 - Waiting for documents. Photos, receipts or a police reference are missing. Tell the customer exactly which ones.
+- R7 - Suspended pending fraud review. Do not discuss the reason with the customer. Say that the claim needs an additional review and that a specialist team will contact them within 10 business days. Never mention fraud.
+- R9 - Settled. Payment has been released. It reaches the customer's bank within 3 business days.
+- X2 - Declined. The decline letter explains the reason. Offer the complaints procedure if the customer disagrees.
+
+Escalation rules
+
+Escalate to a team leader when the customer asks for a manager, when a claim has been at R4 for more than 30 days, or when the customer mentions a vulnerable situation such as a medical condition, a disability or a newborn baby at home. Vulnerable customers can be offered emergency accommodation immediately, before the adjuster visit.
+
+Payments and refunds
+
+Agents may approve emergency payments up to 500 USD for boarding up, drying equipment or emergency locksmiths, without a team leader. Anything above 500 USD needs a team leader. Double charges of the premium are refunded by the billing team within 5 business days; create a billing ticket of type BIL-DUP.
+
+Common questions
+
+Customers often ask whether they may clear out water-damaged rooms. Point them to Section 5.6 of the policy wording: they should keep damaged items until the adjuster has seen them, but they may move them outside.
+
+Customers often confuse escape of water and flood. A burst pipe inside the home is escape of water and is covered. Water from a river or from heavy rain entering from outside is flood and needs the flood add-on.

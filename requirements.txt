@@ -1,0 +1,19 @@
+# Python environment for the MLAIDP demo kit
+boto3>=1.43.95
+strands-agents>=1.57
+mcp>=1.20
+pandas
+numpy
+matplotlib
+jinja2
+pillow
+pyyaml
+ipykernel
+jupyterlab
+jupytext
+nbformat
+nbclient
+markdown
+pymdown-extensions
+jsonschema
+pypdf
