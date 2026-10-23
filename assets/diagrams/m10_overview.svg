@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 340" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="340" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker></defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">M10 at a glance — one stack, three tiers of limits, tenants by attributes</text>
+
+  <!-- §0 -->
+  <rect x="20" y="55" width="166" height="260" rx="10" fill="#f4f5f7" stroke="#232f3e"/>
+  <text x="34" y="80" font-size="14" font-weight="bold" fill="#232f3e">§0 Prep</text>
+  <rect x="34" y="95" width="138" height="56" rx="6" fill="#fff" stroke="#232f3e"/>
+  <text x="103" y="117" font-size="12" text-anchor="middle">CloudFormation</text>
+  <text x="103" y="135" font-size="11" text-anchor="middle" fill="#555">m10_api.yaml · 36 res.</text>
+  <rect x="34" y="165" width="138" height="56" rx="6" fill="#fff" stroke="#232f3e"/>
+  <text x="103" y="187" font-size="12" text-anchor="middle">wait for API keys</text>
+  <text x="103" y="205" font-size="11" text-anchor="middle" fill="#555">403 → accepted</text>
+  <text x="103" y="270" font-size="11" text-anchor="middle" fill="#555">before class</text>
+  <text x="103" y="286" font-size="11" text-anchor="middle" fill="#555">≈ 3–4 min</text>
+
+  <!-- §1 -->
+  <rect x="204" y="55" width="166" height="260" rx="10" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="218" y="80" font-size="14" font-weight="bold" fill="#0073bb">§1 Contract</text>
+  <rect x="218" y="95" width="138" height="56" rx="6" fill="#fff" stroke="#0073bb"/>
+  <text x="287" y="117" font-size="12" text-anchor="middle">POST /ask</text>
+  <text x="287" y="135" font-size="11" text-anchor="middle" fill="#555">per-tenant profile</text>
+  <rect x="218" y="165" width="138" height="72" rx="6" fill="#fff" stroke="#0073bb"/>
+  <text x="287" y="186" font-size="12" text-anchor="middle">5 bad requests</text>
+  <text x="287" y="204" font-size="11" text-anchor="middle" fill="#555">key · schema → edge</text>
+  <text x="287" y="220" font-size="11" text-anchor="middle" fill="#555">injection → guardrail</text>
+  <text x="287" y="286" font-size="11" text-anchor="middle" fill="#0073bb">syntax at the edge</text>
+
+  <!-- §2 -->
+  <rect x="388" y="55" width="166" height="260" rx="10" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="402" y="80" font-size="14" font-weight="bold" fill="#c66c00">§2 Async</text>
+  <rect x="402" y="95" width="138" height="40" rx="6" fill="#fff" stroke="#ff9900"/>
+  <text x="471" y="120" font-size="12" text-anchor="middle">46 × POST /jobs → 202</text>
+  <rect x="402" y="147" width="138" height="40" rx="6" fill="#fff" stroke="#ff9900"/>
+  <text x="471" y="172" font-size="12" text-anchor="middle">idempotency · 404</text>
+  <rect x="402" y="199" width="138" height="56" rx="6" fill="#fff" stroke="#ff9900"/>
+  <text x="471" y="221" font-size="12" text-anchor="middle">SQS → worker (c = 2)</text>
+  <text x="471" y="239" font-size="11" text-anchor="middle" fill="#555">drain · Little's law</text>
+  <text x="471" y="286" font-size="11" text-anchor="middle" fill="#c66c00">poison message → DLQ</text>
+  <line x1="471" y1="135" x2="471" y2="147" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="471" y1="187" x2="471" y2="199" stroke="#232f3e" marker-end="url(#a)"/>
+
+  <!-- §3 -->
+  <rect x="572" y="55" width="166" height="260" rx="10" fill="#fdecea" stroke="#d13212"/>
+  <text x="586" y="80" font-size="14" font-weight="bold" fill="#d13212">§3 Tier 1 — edge</text>
+  <rect x="586" y="95" width="138" height="56" rx="6" fill="#fff" stroke="#d13212"/>
+  <text x="655" y="117" font-size="12" text-anchor="middle">polling storm 10 s</text>
+  <text x="655" y="135" font-size="11" text-anchor="middle" fill="#555">bronze 10 · gold 4 threads</text>
+  <rect x="586" y="165" width="138" height="72" rx="6" fill="#fff" stroke="#d13212"/>
+  <text x="655" y="186" font-size="12" text-anchor="middle">usage plan</text>
+  <text x="655" y="204" font-size="11" text-anchor="middle" fill="#555">token bucket per key</text>
+  <text x="655" y="220" font-size="11" text-anchor="middle" fill="#555">429 + Retry-After</text>
+  <text x="655" y="286" font-size="11" text-anchor="middle" fill="#d13212">fairness, best effort</text>
+
+  <!-- §4 -->
+  <rect x="756" y="55" width="184" height="260" rx="10" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="770" y="80" font-size="14" font-weight="bold" fill="#1d8102">§4 Tenants</text>
+  <rect x="770" y="95" width="156" height="40" rx="6" fill="#fff" stroke="#1d8102"/>
+  <text x="848" y="120" font-size="12" text-anchor="middle">app. inference profiles</text>
+  <rect x="770" y="145" width="156" height="40" rx="6" fill="#fff" stroke="#1d8102"/>
+  <text x="848" y="170" font-size="12" text-anchor="middle">Tier 2: token ledger</text>
+  <rect x="770" y="195" width="156" height="40" rx="6" fill="#fff" stroke="#1d8102"/>
+  <text x="848" y="220" font-size="12" text-anchor="middle">ABAC matrix · simulator</text>
+  <rect x="770" y="245" width="156" height="40" rx="6" fill="#fff" stroke="#1d8102"/>
+  <text x="848" y="270" font-size="12" text-anchor="middle">ledger vs CloudWatch</text>
+
+  <line x1="186" y1="185" x2="204" y2="185" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="370" y1="185" x2="388" y2="185" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="554" y1="185" x2="572" y2="185" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="738" y1="185" x2="756" y2="185" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+  <text x="480" y="334" font-size="11" text-anchor="middle" fill="#555">Cleanup (after Part 2): delete the stack + /aws/lambda/mlaidp2-m10-* log groups, then list every resource type again</text>
+</svg>

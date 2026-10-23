@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 370" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="370" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker><marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d13212"/></marker><marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1d8102"/></marker></defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">AgentCore Memory — Monday's events become Thursday's context</text>
+  <!-- monday -->
+  <rect x="20" y="55" width="220" height="255" rx="10" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="35" y="78" font-size="14" font-weight="bold" fill="#0073bb">Monday (§0 Prep)</text>
+  <text x="35" y="95" font-size="11" fill="#555">session "monday", actor broker-alex-…</text>
+  <rect x="35" y="108" width="190" height="34" rx="5" fill="#fff" stroke="#0073bb"/><text x="45" y="129" font-size="11">USER · quote C-1001, don't bind</text>
+  <rect x="35" y="150" width="190" height="34" rx="5" fill="#fff" stroke="#0073bb"/><text x="45" y="171" font-size="11">ASSISTANT · 630 USD, not bound</text>
+  <rect x="35" y="192" width="190" height="34" rx="5" fill="#fff" stroke="#0073bb"/><text x="45" y="213" font-size="11">USER · monthly premium, bullets</text>
+  <rect x="35" y="234" width="190" height="34" rx="5" fill="#fff" stroke="#0073bb"/><text x="45" y="255" font-size="11">ASSISTANT · noted</text>
+  <text x="130" y="292" font-size="12" text-anchor="middle" fill="#0073bb">4 × CreateEvent</text>
+  <!-- memory -->
+  <rect x="270" y="55" width="420" height="255" rx="10" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="285" y="78" font-size="14" font-weight="bold" fill="#c66c00">AgentCore Memory</text>
+  <text x="675" y="78" font-size="11" text-anchor="end" fill="#555">mlaidp2_m05_broker_memory</text>
+  <rect x="290" y="92" width="380" height="54" rx="6" fill="#fff" stroke="#ff9900"/>
+  <text x="480" y="113" font-size="13" text-anchor="middle" font-weight="bold">Short-term: events</text>
+  <text x="480" y="132" font-size="11" text-anchor="middle" fill="#555">raw turns per actorId + sessionId · expire after 7 days</text>
+  <line x1="480" y1="146" x2="480" y2="196" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="490" y="168" font-size="11" fill="#555">strategies extract records</text>
+  <text x="490" y="183" font-size="11" fill="#555">asynchronously (≈ 2 min)</text>
+  <rect x="290" y="198" width="185" height="62" rx="6" fill="#fff" stroke="#1d8102"/>
+  <text x="382" y="217" font-size="12" text-anchor="middle" font-weight="bold">Facts (semantic)</text>
+  <text x="382" y="234" font-size="11" text-anchor="middle" fill="#555">/brokers/{actorId}/facts/</text>
+  <text x="382" y="250" font-size="11" text-anchor="middle" fill="#555">C-1001 · 300,000 USD · 630</text>
+  <rect x="485" y="198" width="185" height="62" rx="6" fill="#fff" stroke="#1d8102"/>
+  <text x="577" y="217" font-size="12" text-anchor="middle" font-weight="bold">Preferences</text>
+  <text x="577" y="234" font-size="11" text-anchor="middle" fill="#555">/brokers/{actorId}/preferences/</text>
+  <text x="577" y="250" font-size="11" text-anchor="middle" fill="#555">monthly premium · bullets</text>
+  <text x="480" y="290" font-size="12" text-anchor="middle" fill="#c66c00">Long-term: records, one namespace per broker</text>
+  <line x1="240" y1="119" x2="290" y2="119" stroke="#232f3e" marker-end="url(#a)"/>
+  <!-- thursday -->
+  <rect x="740" y="55" width="200" height="255" rx="10" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="755" y="78" font-size="14" font-weight="bold" fill="#1d8102">Thursday (§4)</text>
+  <text x="755" y="95" font-size="11" fill="#555">new session, one sentence</text>
+  <rect x="755" y="108" width="170" height="48" rx="6" fill="#fff" stroke="#1d8102"/>
+  <text x="840" y="127" font-size="11" text-anchor="middle" font-weight="bold">after each message</text>
+  <text x="840" y="143" font-size="11" text-anchor="middle">CreateEvent</text>
+  <rect x="755" y="168" width="170" height="62" rx="6" fill="#fff" stroke="#1d8102"/>
+  <text x="840" y="186" font-size="11" text-anchor="middle" font-weight="bold">before invocation</text>
+  <text x="840" y="202" font-size="11" text-anchor="middle">RetrieveMemoryRecords</text>
+  <text x="840" y="218" font-size="11" text-anchor="middle">→ added to system prompt</text>
+  <text x="840" y="252" font-size="11" text-anchor="middle">get_customer → get_quote</text>
+  <text x="840" y="268" font-size="11" text-anchor="middle">→ bind_policy (≤ 2,500)</text>
+  <text x="840" y="290" font-size="11" text-anchor="middle" fill="#555">Strands hook, 2 callbacks</text>
+  <line x1="670" y1="229" x2="755" y2="205" stroke="#1d8102" marker-end="url(#g)"/>
+  <text x="712" y="240" font-size="11" text-anchor="middle" fill="#1d8102">search</text>
+  <line x1="755" y1="130" x2="670" y2="122" stroke="#232f3e" stroke-dasharray="4,3" marker-end="url(#a)"/>
+  <text x="20" y="345" font-size="12" fill="#232f3e">The namespace is the isolation boundary: the same query against another broker's namespace returns 0 records.</text>
+</svg>

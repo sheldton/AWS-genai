@@ -5,12 +5,16 @@
 
 > **How this guide was verified.** The notebook ran end to end, live, in us-east-1 in October 2026 (several full runs, including the cleanup); the *Expect* lines are the ranges measured across those runs. The console part was **not** clicked through: the state each step shows (jobs, configuration, scores, judge explanations, S3 layout, role acceptance) was verified through the equivalent API calls, so page, tab and button names may differ slightly from what you see.
 
+> **Reading the notebook.** Lines worth slowing down for carry a `# ▶ KEY` comment, and every section uses the same boxes: 💡 Concept (the idea before the code), 🔑 Key code (where to look), 📊 How to read this (after the output) and ✅ Takeaway (what to remember). A Summary table at the end recaps what you built.
+
 ## What you will learn
 - Where plain unit tests work in a GenAI system — request building, parsing the judge's output, output contracts — and how far a deterministic check reaches on a real golden set (not all of it).
 - How to **calibrate an LLM judge against human labels**: raw agreement, Cohen's kappa with a bootstrap interval, and reading the disagreements to find where the rubric is unclear. A naive "rate 1–5" judge against a hardened rubric.
 - How to measure a judge's **position bias** (swap the two answers) and **verbosity bias** (plain vs padded answer), and the protocol plus prompt changes that remove both.
 - How to build a **release gate** for a prompt change: rules fixed before the run, a cluster bootstrap CI on the paired score difference with a non-inferiority margin, output contracts and an output-token budget.
 - How the managed path works: two **Amazon Bedrock Evaluations** jobs (LLM-as-a-judge on your own responses, four built-in metrics plus a **custom metric**) created in code, and the same statistics applied to their per-record scores.
+
+![M09 at a glance: §1 unit tests, §2 judge calibration, §3 judge biases, §4 release gate, §5 managed evaluations](../assets/diagrams/m09_overview.svg)
 
 ## Before you start
 1. **Environment** (once, from the repository root — see [../README.md](../README.md)):
@@ -33,6 +37,8 @@
 ### §0 Setup and Prep — golden set, two prompt versions, the job request
 **What the code does:** loads a golden set of 20 insurance support questions with reference answers and two system prompts. v2 differs by one innocent-looking sentence asking the assistant to always apologize and thank the customer. It then creates the S3 bucket (public access blocked, CORS for the console wizard), a least-privilege service role, and the two evaluation jobs. Each job uses **bring-your-own inference responses**: the notebook generates the v1 or v2 answers itself (Nova Lite, temperature 0), writes them as JSONL with the reference, and the service only *judges* them — identical configuration for both versions, so the two reports are a fair regression comparison.
 
+- **Key code to read:** every model call is costed from its usage block (`SPEND`); in `ensure_role`, the trust condition that lets only evaluation jobs of your account assume the role, and the permission policy limited to one bucket and one judge model; in `job_request`, `customMetricConfig` — your own rubric as a metric, with `{{prompt}}` / `{{prediction}}` placeholders and a definition per scale value — and `precomputedInferenceSource`, which means the job only judges and never calls the model under test; in `write_dataset`, the record format, where `modelIdentifier` must equal `inferenceSourceIdentifier`; and the asynchronous job start, retried while the new role propagates.
+
 **What to look for:**
 - The role's trust policy is pinned to your account (`aws:SourceAccount`) and to `evaluation-job/*` (confused-deputy protection); its permissions name one bucket prefix and one judge model.
 - The printed job request: five metrics (`Builtin.Correctness`, `Builtin.Completeness`, `Builtin.Helpfulness`, `Builtin.ProfessionalStyleAndTone`, `Empathy`), evaluator `us.amazon.nova-pro-v1:0`, `precomputedInferenceSource` = `support-v1`, and the custom metric's rating scale Poor 0 / Good 1 / Excellent 2. The `EMPATHY` cell holds the custom metric's instructions with the template variables `{{prompt}}` and `{{prediction}}`.
@@ -41,6 +47,8 @@
 
 ### §1 Test what *can* be asserted
 **What the code does:** eight plain unit tests for the deterministic parts — the code that builds the request, the judge-output parser and the output contract (numbers from the reference must appear, a length budget, no promises). Then the same contract runs on 20 live v1 answers.
+
+- **Key code to read:** the last line of `parse_verdict` — only an integer from 1 to 5 counts as a score, anything else is `None` (fail closed); and the `numbers` line in `contract`, a partial oracle: the reference's numbers must be a subset of the answer's numbers. In the live table, the *oracle* column's "– needs a judge –" rows are where §2 begins.
 
 **What to look for:**
 - The parser must *fail closed*: it never reads a score out of prose. Nova Lite sometimes returns `"score": "2"` as a string, so that case has its own test.
@@ -53,6 +61,10 @@
 
 ### §2 Who judges the judge? Calibration against human labels
 **What the code does:** 38 answers carry a human PASS/FAIL label, in five kinds: short and right, padded but right, long, confident and *wrong*, short and subtly wrong (a missing condition such as "after forced entry"), and borderline. Two judges (Mistral Large 3, Nova Lite) × two rubrics (naive "rate 1–5" and a hardened rubric that grades against the reference) score all of them — 152 calls. A score ≥ 4 counts as PASS. The table shows agreement, Cohen's kappa with a 95 % bootstrap interval, and the mean score per kind; then the disagreements and a chart.
+
+![Cohen's kappa: observed agreement corrected for the agreement expected by chance](../assets/diagrams/m09_kappa.svg)
+
+- **Key code to read:** the `HARDENED` prompt — a reference answer, an anchored scale, a cap on the score when the answer contradicts the reference, and "length is not quality"; `ARMS`, where every judge/prompt arm grades the same 38 answers; in `kappa`, the `pe` line, the chance agreement computed from each rater's own PASS/FAIL rates; and in `bootstrap`, the resampling of item indices with replacement, keeping the middle 95 % of the recomputed statistic.
 
 **What to look for:**
 - First line: the chance baseline. A judge that says PASS to everything already agrees 58 % of the time, which is why raw agreement is misleading and kappa corrects for chance.
@@ -67,6 +79,10 @@
 ### §3 Position bias and verbosity bias
 **What the code does:** pairwise judging, every pair judged twice with the order swapped (192 calls). *Position:* two equally good answers — does the verdict follow the slot instead of the answer? *Verbosity:* the same correct answer, plain vs padded — which one wins?
 
+![Pairwise judging in both orders: four possible outcomes](../assets/diagrams/m09_swap.svg)
+
+- **Key code to read:** in `pairwise`, the loop that sends the same pair in both orders, and the mapping from slot (`A` / `B`) back to the answer (`x` / `y`) — a consistent judge names the same answer twice; then `PAIR_HARDENED`, which allows TIE and tells the judge to ignore the order.
+
 **What to look for:**
 - A verdict that changes when you swap the order is a coin flip. The cheap judge flips far more often than the strong one.
 - With the naive prompt, the padded answer wins in **both** orders, every time.
@@ -78,6 +94,10 @@
 
 ### §4 A release gate for prompt v2 — with error bars
 **What the code does:** prints the gate rules **first** (correctness: lower bound of the 95 % CI of mean(v2 − v1) > −0.5; contracts: v2 pass share ≥ v1 share − 5 points; cost: v2 output tokens ≤ 1.5 × v1). Then two samples per question per version at temperature 0.7, scored by the best judge from §2 (80 answers + 80 judge calls), a gate table and a bootstrap chart.
+
+![The correctness rule: cluster bootstrap over questions and a non-inferiority margin](../assets/diagrams/m09_gate.svg)
+
+- **Key code to read:** `GATE`, the rules as data, printed before any answer exists; `GATE_JUDGE`, the best-calibrated judge from §2, pinned for the whole gate; `per_question`, which turns the two samples of a question into one value (the cluster); the `BOOT` line, which resamples the 20 questions — not the 40 answers — 5,000 times, and the percentiles read from it; and the correctness check `lo > -0.5`, where the CI's *lower bound*, not the point estimate, must clear the margin.
 
 **What to look for:**
 - The two samples of one question are not independent, so the bootstrap resamples *questions* (a cluster bootstrap). Resampling answers would make the interval look narrower than it is.
@@ -92,6 +112,8 @@
 ### §5 The managed version — Amazon Bedrock Evaluations
 **What the code does:** reads both jobs with `GetEvaluationJob` (status, configuration, the judge), loads the per-record scores from the JSONL output in S3, pairs them by prompt and computes a bootstrap CI per metric — the same statistics as §4 — then lists the records that failed with the judge's explanation.
 
+- **Key code to read:** `get_evaluation_job` for status, configuration and timing; in `job_records`, the output files located by the job id under the results prefix; in `scores_by_metric`, records with a score but no `result` are skipped (a judge error for that record); `paired_ci`, which pairs the differences per prompt and reuses §4's percentile bootstrap; and the `reading` line, where the interval, not the means, decides what you report.
+
 **What to look for:**
 - **Empathy collapses** for v2 — exactly what the custom metric's instructions call "scripted". Your rubric, as a managed metric.
 - **Helpfulness goes up** for v2, and professional tone stays at 1.0 on an answer that quotes the wrong deductible. A built-in metric answers the question it was written for; choose the ones that answer yours.
@@ -104,6 +126,26 @@
 **Think about it:** In the failed records, do Helpfulness and professional tone stay high on an answer that gets a fact wrong? What does that tell you about choosing metrics for *your* gate — and which metric would you never ship without?
 
 The last cell before Cleanup prints the model spend per section: `total $0.038` in our runs (the evaluation jobs bill their judge tokens separately).
+
+## Going deeper
+- **Which kappa.** Cohen's κ covers two raters and nominal labels such as PASS/FAIL. For ordinal 1–5 scores use a *weighted* κ, where near misses count partially; for more than two raters, Fleiss' κ or Krippendorff's α. The usual 0.6 and 0.8 bars are conventions (Landis & Koch), not laws — the interval and the disagreements tell you more.
+- **Why bootstrap.** At small *n*, and with dependent samples, κ and mean differences have no simple closed-form interval. The percentile bootstrap — resample the independent unit, recompute, take the 2.5th and 97.5th percentiles — makes few assumptions. Choose the unit carefully: items for κ, questions (clusters) for the gate.
+- **Non-inferiority vs superiority.** Superiority asks "is v2 better?"; non-inferiority asks "is v2 worse by no more than δ?". The margin δ is a product decision, fixed before the run, and it must be wider than the noise your test set can resolve, or the gate is a coin toss.
+- **Bedrock Evaluations job types.** Programmatic jobs (automatic metrics such as accuracy, robustness, toxicity on built-in or your own datasets), human jobs (a work team rates), model-as-a-judge jobs (an evaluator model with built-in or custom metrics) and RAG evaluations (Knowledge Bases or your own retrieval and generation). Bring-your-own responses work for model-as-a-judge and RAG jobs, so a system running outside Bedrock can be judged too.
+- **Choosing the judge.** Prefer a judge from a different model family than the generator (to avoid self-preference), pin its version for the life of a gate, and re-run the calibration set whenever the judge prompt or the judge model changes. A cheaper judge that clears the κ bar is fine for per-commit runs.
+- **How a custom metric runs.** The service substitutes `{{prompt}}` and `{{prediction}}` (and `{{ground_truth}}` when the dataset has a reference) into your instructions, asks the evaluator for one of your scale values, keeps its explanation per record and normalizes the score to 0–1 in the report.
+
+## Questions to check your understanding
+1. **Why not run the managed evaluation job for everything?**
+   <details><summary>Answer</summary>It takes 10–30 minutes and bills judge tokens, while the notebook gate takes seconds and cents. Use the fast gate on every pull request and the managed job nightly and on release candidates.</details>
+2. **How many golden questions do you need?**
+   <details><summary>Answer</summary>Enough that the CI is narrower than your margin. Halving the CI width takes roughly four times as many questions; start with 50–100 per critical intent and add cases from production failures.</details>
+3. **Can the judge be the same model as the generator?**
+   <details><summary>Answer</summary>It can, but it may prefer its own family's style (self-preference). Measure it instead of assuming: run both judges on the calibration set, as §2 does with Nova Lite.</details>
+4. **The judge runs at temperature 0 — why sample each answer twice?**
+   <details><summary>Answer</summary>The *generator* is sampled at 0.7 on purpose, to capture the run-to-run variation a user would see; only the judge stays at 0. Even at temperature 0, outputs can differ slightly between calls — one more reason to report intervals.</details>
+5. **Why does Helpfulness rise for the worse prompt?**
+   <details><summary>Answer</summary>A built-in metric answers the question its judge prompt asks, and an apologetic, reassuring answer reads as helpful. Choose metrics that encode *your* release question, or write a custom one.</details>
 
 ## Part 2 — the same in the console
 This part uses the bucket, the datasets, the role and the two **finished** jobs from the notebook. Run every cell above **Cleanup** first (≈ 2 min of cell time) at least 35 minutes before; don't use Run All. Note the run id that §0 Setup prints — the bucket is `mlaidp2-m09-<run id>`.

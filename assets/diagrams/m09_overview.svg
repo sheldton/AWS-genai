@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 380" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="380" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker></defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">M09 at a glance — assert what you can, measure the rest with error bars</text>
+
+  <!-- §0 strip -->
+  <rect x="20" y="46" width="920" height="44" rx="8" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="35" y="66" font-size="12" font-weight="bold" fill="#0073bb">§0</text>
+  <text x="60" y="66" font-size="12">Golden set: 20 questions + reference answers · prompt v1 (production) vs v2 ("always apologize and thank")</text>
+  <text x="60" y="82" font-size="11" fill="#555">§0 Prep: S3 bucket + service role, BYO-response datasets, two Bedrock Evaluations jobs started ≥ 35 min before class</text>
+
+  <!-- panels -->
+  <rect x="20" y="105" width="172" height="190" rx="10" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="32" y="127" font-size="13" font-weight="bold" fill="#1d8102">§1 Unit tests</text>
+  <text x="32" y="148" font-size="11">request builder, judge</text>
+  <text x="32" y="163" font-size="11">parser (fails closed),</text>
+  <text x="32" y="178" font-size="11">output contracts</text>
+  <text x="32" y="203" font-size="11">contracts on live</text>
+  <text x="32" y="218" font-size="11">answers: a partial</text>
+  <text x="32" y="233" font-size="11">oracle (numbers only)</text>
+  <text x="32" y="278" font-size="11" fill="#1d8102" font-weight="bold">ms · $0 · exact</text>
+
+  <rect x="207" y="105" width="172" height="190" rx="10" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="219" y="127" font-size="13" font-weight="bold" fill="#0073bb">§2 Calibrate judge</text>
+  <text x="219" y="148" font-size="11">38 human-labelled</text>
+  <text x="219" y="163" font-size="11">answers, 5 kinds</text>
+  <text x="219" y="188" font-size="11">2 judges × naive /</text>
+  <text x="219" y="203" font-size="11">hardened rubric</text>
+  <text x="219" y="228" font-size="11">Cohen's κ + bootstrap CI,</text>
+  <text x="219" y="243" font-size="11">read the disagreements</text>
+  <text x="219" y="278" font-size="11" fill="#0073bb" font-weight="bold">is the judge any good?</text>
+
+  <rect x="394" y="105" width="172" height="190" rx="10" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="406" y="127" font-size="13" font-weight="bold" fill="#0073bb">§3 Judge biases</text>
+  <text x="406" y="148" font-size="11">pairwise, both orders</text>
+  <text x="406" y="173" font-size="11">position: equal answers</text>
+  <text x="406" y="188" font-size="11">swapped A ↔ B</text>
+  <text x="406" y="213" font-size="11">verbosity: plain vs</text>
+  <text x="406" y="228" font-size="11">padded, same facts</text>
+  <text x="406" y="278" font-size="11" fill="#0073bb" font-weight="bold">TIE allowed · win = survives</text>
+
+  <rect x="581" y="105" width="172" height="190" rx="10" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="593" y="127" font-size="13" font-weight="bold" fill="#c66c00">§4 Release gate</text>
+  <text x="593" y="148" font-size="11">rules written first</text>
+  <text x="593" y="173" font-size="11">correctness: CI of v2 − v1</text>
+  <text x="593" y="188" font-size="11">vs margin −0.5</text>
+  <text x="593" y="203" font-size="11">(cluster bootstrap)</text>
+  <text x="593" y="228" font-size="11">+ contracts + token budget</text>
+  <text x="593" y="278" font-size="11" fill="#c66c00" font-weight="bold">ship / back to dev</text>
+
+  <rect x="768" y="105" width="172" height="190" rx="10" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="780" y="127" font-size="13" font-weight="bold" fill="#c66c00">§5 Bedrock Evals</text>
+  <text x="780" y="148" font-size="11">two jobs, same config:</text>
+  <text x="780" y="163" font-size="11">Nova Pro judge,</text>
+  <text x="780" y="178" font-size="11">4 built-in metrics</text>
+  <text x="780" y="193" font-size="11">+ custom "Empathy"</text>
+  <text x="780" y="218" font-size="11">per-record scores in S3</text>
+  <text x="780" y="233" font-size="11">→ same paired CIs</text>
+  <text x="780" y="278" font-size="11" fill="#c66c00" font-weight="bold">managed, auditable</text>
+
+  <line x1="192" y1="200" x2="205" y2="200" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="379" y1="200" x2="392" y2="200" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="566" y1="200" x2="579" y2="200" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="753" y1="200" x2="766" y2="200" stroke="#232f3e" marker-end="url(#a)"/>
+
+  <!-- bottom scale -->
+  <line x1="40" y1="330" x2="920" y2="330" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+  <text x="40" y="352" font-size="12" fill="#1d8102">cheap, fast, certain — run on every commit</text>
+  <text x="920" y="352" font-size="12" fill="#c66c00" text-anchor="end">slower, costs tokens, statistical — run per release</text>
+  <text x="480" y="372" font-size="11" fill="#555" text-anchor="middle">the calibrated judge from §2 (pinned) is the one the gate in §4 uses</text>
+</svg>

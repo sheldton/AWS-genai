@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 360" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="360" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker></defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">M08 at a glance — who spends, is it right, show it, trace it</text>
+
+  <!-- §1 -->
+  <rect x="20" y="50" width="215" height="200" rx="10" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="35" y="74" font-size="14" font-weight="bold" fill="#0073bb">§1 Who spends the tokens?</text>
+  <rect x="35" y="88" width="185" height="42" rx="6" fill="#fff" stroke="#0073bb"/>
+  <text x="127" y="106" font-size="12" text-anchor="middle">3 tenants × 3 features</text>
+  <text x="127" y="122" font-size="11" text-anchor="middle" fill="#555">Converse + requestMetadata</text>
+  <rect x="35" y="140" width="185" height="42" rx="6" fill="#fff" stroke="#0073bb"/>
+  <text x="127" y="158" font-size="12" text-anchor="middle">reconcile log ↔ client</text>
+  <text x="127" y="174" font-size="11" text-anchor="middle" fill="#555">by request id, token counts</text>
+  <rect x="35" y="192" width="185" height="42" rx="6" fill="#fff" stroke="#0073bb"/>
+  <text x="127" y="210" font-size="12" text-anchor="middle">Logs Insights from code</text>
+  <text x="127" y="226" font-size="11" text-anchor="middle" fill="#555">cost · p95 · truncation · PII</text>
+
+  <!-- §2 -->
+  <rect x="255" y="50" width="215" height="200" rx="10" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="270" y="74" font-size="14" font-weight="bold" fill="#c66c00">§2 Is it right?</text>
+  <rect x="270" y="88" width="185" height="42" rx="6" fill="#fff" stroke="#ff9900"/>
+  <text x="362" y="106" font-size="12" text-anchor="middle">prompt v1 vs broken v2</text>
+  <text x="362" y="122" font-size="11" text-anchor="middle" fill="#555">both return HTTP 200</text>
+  <rect x="270" y="140" width="185" height="42" rx="6" fill="#fff" stroke="#ff9900"/>
+  <text x="362" y="158" font-size="12" text-anchor="middle">ApplyGuardrail grounding</text>
+  <text x="362" y="174" font-size="11" text-anchor="middle" fill="#555">vs a fact check (misses?)</text>
+  <rect x="270" y="192" width="185" height="42" rx="6" fill="#fff" stroke="#ff9900"/>
+  <text x="362" y="210" font-size="12" text-anchor="middle">EMF line → metric</text>
+  <text x="362" y="226" font-size="11" text-anchor="middle" fill="#555">metric-math alarm on a rate</text>
+
+  <!-- §3 -->
+  <rect x="490" y="50" width="215" height="200" rx="10" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="505" y="74" font-size="14" font-weight="bold" fill="#1d8102">§3 Dashboard as code</text>
+  <rect x="505" y="88" width="185" height="42" rx="6" fill="#fff" stroke="#1d8102"/>
+  <text x="597" y="106" font-size="12" text-anchor="middle">PutDashboard (JSON)</text>
+  <text x="597" y="122" font-size="11" text-anchor="middle" fill="#555">validated on deploy</text>
+  <rect x="505" y="140" width="185" height="42" rx="6" fill="#fff" stroke="#1d8102"/>
+  <text x="597" y="158" font-size="12" text-anchor="middle">three layers</text>
+  <text x="597" y="174" font-size="11" text-anchor="middle" fill="#555">quality · cost · per model</text>
+  <rect x="505" y="192" width="185" height="42" rx="6" fill="#fff" stroke="#1d8102"/>
+  <text x="597" y="210" font-size="12" text-anchor="middle">GetMetricWidgetImage</text>
+  <text x="597" y="226" font-size="11" text-anchor="middle" fill="#555">the chart as a PNG</text>
+
+  <!-- §4 -->
+  <rect x="725" y="50" width="215" height="200" rx="10" fill="#f1f8fd" stroke="#232f3e"/>
+  <text x="740" y="74" font-size="14" font-weight="bold" fill="#232f3e">§4 Agent traces</text>
+  <rect x="740" y="88" width="185" height="42" rx="6" fill="#fff" stroke="#232f3e"/>
+  <text x="832" y="106" font-size="12" text-anchor="middle">Strands agent, 2 tools</text>
+  <text x="832" y="122" font-size="11" text-anchor="middle" fill="#555">Nova Pro, tagged calls</text>
+  <rect x="740" y="140" width="185" height="42" rx="6" fill="#fff" stroke="#232f3e"/>
+  <text x="832" y="158" font-size="12" text-anchor="middle">OpenTelemetry spans</text>
+  <text x="832" y="174" font-size="11" text-anchor="middle" fill="#555">in-memory exporter</text>
+  <rect x="740" y="192" width="185" height="42" rx="6" fill="#fff" stroke="#232f3e"/>
+  <text x="832" y="210" font-size="12" text-anchor="middle">reconcile spans ↔ log</text>
+  <text x="832" y="226" font-size="11" text-anchor="middle" fill="#555">tokens, failed attempts</text>
+
+  <!-- shared invocation log -->
+  <rect x="20" y="295" width="920" height="48" rx="8" fill="#232f3e"/>
+  <text x="480" y="315" font-size="13" font-weight="bold" fill="#fff" text-anchor="middle">Model invocation logging → CloudWatch Logs  /aws/bedrock/mlaidp2-m08-invocations</text>
+  <text x="480" y="333" font-size="11" fill="#ffffff" text-anchor="middle">§0 Prep: account-level switch saved and restored · least-privilege role · 3-day retention · e-mail masking · canary</text>
+  <line x1="127" y1="250" x2="127" y2="293" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="135" y="276" font-size="11" fill="#555">records + queries</text>
+  <line x1="362" y1="293" x2="362" y2="252" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="370" y="276" font-size="11" fill="#555">root cause by requestId</text>
+  <line x1="597" y1="293" x2="597" y2="252" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="605" y="276" font-size="11" fill="#555">tenant table widget</text>
+  <line x1="832" y1="293" x2="832" y2="252" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="840" y="276" font-size="11" fill="#555">billing truth</text>
+</svg>

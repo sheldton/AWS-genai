@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="500" fill="#ffffff"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d13212"/></marker>
+  </defs>
+  <text x="20" y="28" font-size="17" font-weight="bold" fill="#232f3e">Stack mlaidp2-m10-api — the path of one request (sync and async)</text>
+
+  <!-- client -->
+  <rect x="20" y="175" width="120" height="70" rx="8" fill="#f4f5f7" stroke="#232f3e"/>
+  <text x="80" y="200" font-size="13" text-anchor="middle" font-weight="bold">Tenant client</text>
+  <text x="80" y="217" font-size="11" text-anchor="middle" fill="#555">HTTPS +</text>
+  <text x="80" y="232" font-size="11" text-anchor="middle" fill="#555">x-api-key header</text>
+
+  <!-- API Gateway -->
+  <rect x="165" y="55" width="215" height="330" rx="10" fill="#fdecea" stroke="#d13212"/>
+  <text x="180" y="78" font-size="13" font-weight="bold" fill="#d13212">API Gateway (REST, stage v1)</text>
+  <rect x="180" y="92" width="185" height="58" rx="6" fill="#fff" stroke="#d13212"/>
+  <text x="272" y="112" font-size="12" text-anchor="middle">① API key → usage plan</text>
+  <text x="272" y="129" font-size="11" text-anchor="middle" fill="#555">who is the tenant?</text>
+  <text x="272" y="143" font-size="11" text-anchor="middle" fill="#d13212">missing / unknown → 403</text>
+  <rect x="180" y="162" width="185" height="58" rx="6" fill="#fff" stroke="#d13212"/>
+  <text x="272" y="182" font-size="12" text-anchor="middle">② token bucket per key</text>
+  <text x="272" y="199" font-size="11" text-anchor="middle" fill="#555">rate · burst · daily quota</text>
+  <text x="272" y="213" font-size="11" text-anchor="middle" fill="#d13212">empty → 429, Retry-After: 1</text>
+  <rect x="180" y="232" width="185" height="58" rx="6" fill="#fff" stroke="#d13212"/>
+  <text x="272" y="252" font-size="12" text-anchor="middle">③ request validator</text>
+  <text x="272" y="269" font-size="11" text-anchor="middle" fill="#555">JSON schema "Question"</text>
+  <text x="272" y="283" font-size="11" text-anchor="middle" fill="#d13212">violation → 400 + reasons</text>
+  <text x="272" y="320" font-size="11" text-anchor="middle" fill="#555">these answers carry</text>
+  <text x="272" y="335" font-size="11" text-anchor="middle" fill="#555">x-amzn-ErrorType:</text>
+  <text x="272" y="350" font-size="11" text-anchor="middle" fill="#d13212">no Lambda ran, no tokens spent</text>
+
+  <!-- API Lambda -->
+  <rect x="415" y="165" width="165" height="90" rx="8" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="497" y="187" font-size="13" text-anchor="middle" font-weight="bold">Lambda mlaidp2-m10-api</text>
+  <text x="497" y="205" font-size="11" text-anchor="middle" fill="#555">apiKeyId → tenant, profile</text>
+  <text x="497" y="220" font-size="11" text-anchor="middle" fill="#555">token budget left? else 429</text>
+  <text x="497" y="235" font-size="11" text-anchor="middle" fill="#555">route: /ask · /jobs · /jobs/{id}</text>
+
+  <!-- Bedrock -->
+  <rect x="640" y="55" width="300" height="76" rx="8" fill="#232f3e"/>
+  <text x="790" y="78" font-size="13" text-anchor="middle" fill="#fff" font-weight="bold">Amazon Bedrock — Converse</text>
+  <text x="790" y="97" font-size="11" text-anchor="middle" fill="#ddd">modelId = the tenant's application inference profile</text>
+  <text x="790" y="113" font-size="11" text-anchor="middle" fill="#ddd">(bronze → Nova Micro, gold → Nova Lite)</text>
+  <text x="790" y="126" font-size="11" text-anchor="middle" fill="#ff9900">+ company guardrail v1</text>
+
+  <!-- DynamoDB -->
+  <rect x="640" y="180" width="200" height="72" rx="8" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="740" y="201" font-size="13" text-anchor="middle" font-weight="bold">DynamoDB</text>
+  <text x="740" y="219" font-size="11" text-anchor="middle" fill="#555">mlaidp2-m10-jobs (status, TTL)</text>
+  <text x="740" y="235" font-size="11" text-anchor="middle" fill="#555">mlaidp2-m10-usage (ledger)</text>
+
+  <!-- SQS -->
+  <rect x="415" y="320" width="165" height="64" rx="8" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="497" y="343" font-size="13" text-anchor="middle" font-weight="bold">SQS mlaidp2-m10-jobs</text>
+  <text x="497" y="361" font-size="11" text-anchor="middle" fill="#555">group id = tenant (fair queue)</text>
+  <text x="497" y="375" font-size="11" text-anchor="middle" fill="#555">visibility timeout 20 s</text>
+
+  <!-- Worker -->
+  <rect x="640" y="320" width="165" height="64" rx="8" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="722" y="343" font-size="13" text-anchor="middle" font-weight="bold">Lambda …-worker</text>
+  <text x="722" y="361" font-size="11" text-anchor="middle" fill="#555">skip DONE · classify errors</text>
+  <text x="722" y="375" font-size="11" text-anchor="middle" fill="#555">batchItemFailures</text>
+
+  <!-- DLQ -->
+  <rect x="415" y="425" width="165" height="50" rx="8" fill="#fdecea" stroke="#d13212"/>
+  <text x="497" y="446" font-size="13" text-anchor="middle" font-weight="bold">DLQ …-jobs-dlq</text>
+  <text x="497" y="463" font-size="11" text-anchor="middle" fill="#555">poison messages, kept 1 day</text>
+
+  <!-- arrows -->
+  <line x1="140" y1="210" x2="165" y2="210" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="380" y1="210" x2="415" y2="210" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="397" y="202" font-size="10" text-anchor="middle" fill="#555">proxy</text>
+  <line x1="580" y1="180" x2="640" y2="110" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="598" y="147" font-size="11" text-anchor="end" fill="#232f3e">/ask (sync)</text>
+  <line x1="580" y1="216" x2="640" y2="216" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="610" y="210" font-size="10" text-anchor="middle" fill="#555">put · get</text>
+  <line x1="497" y1="255" x2="497" y2="320" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="505" y="280" font-size="11" fill="#232f3e">/jobs: job + message</text>
+  <text x="505" y="295" font-size="11" fill="#c66c00">→ 202 + Location</text>
+  <line x1="580" y1="352" x2="640" y2="352" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="722" y="404" font-size="11" text-anchor="middle" fill="#c66c00">event source mapping:</text>
+  <text x="722" y="419" font-size="11" text-anchor="middle" fill="#c66c00">batch 1 · MaximumConcurrency 2</text>
+  <line x1="722" y1="320" x2="722" y2="252" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="728" y="292" font-size="10" fill="#555">DONE · ADD tokens</text>
+  <path d="M805,352 L890,352 L890,131" fill="none" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="896" y="250" font-size="11" fill="#232f3e">async</text>
+  <line x1="497" y1="384" x2="497" y2="425" stroke="#d13212" marker-end="url(#r)"/>
+  <text x="505" y="409" font-size="10" fill="#d13212">receives &gt; maxReceiveCount 2</text>
+</svg>

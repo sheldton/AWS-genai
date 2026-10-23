@@ -5,11 +5,15 @@
 
 > **How this guide was verified.** The notebook was run end to end, live, in us-east-1 in October 2026; every **Expect** below is a range measured over several of those runs. The console steps in Part 2 were checked through the equivalent API calls (prompts, versions and variants, the flow and its versions, the alias, the draft's behaviour through the built-in test alias), but the console pages, fields and buttons were **not** clicked through — labels may differ slightly from what you see. Model answers vary from run to run, so treat every number as a range, not a target.
 
+**Reading the notebook.** The lines worth studying carry a `# ▶ KEY` comment, and every section uses the same four boxes: 💡 **Concept** (the idea before the code), 🔑 **Key code** (where to look), 📊 **How to read this** (how to interpret the output) and ✅ **Takeaway** (the one sentence to keep). A **Summary** table at the end lists what you built.
+
 ## What you will learn
 - How to compare four prompt techniques — **zero-shot, few-shot, chain-of-thought and structured output through a forced tool schema** — on a golden set, with Wilson intervals, tokens and dollars per 1,000 requests, and why the "best" technique depends on the model.
 - How to treat a prompt as a resource in **Amazon Bedrock Prompt Management**: variants (one per model), immutable numbered versions, content-addressed publishing that is safe to re-run, and Converse called with a **prompt version ARN** instead of prompt text.
 - How to define an **Amazon Bedrock Flow in code** — triage prompt → Lambda (routing rules + CRM lookup) → condition → specialist prompts — publish it as a **version** behind an **alias**, and read the per-node trace, including token usage, of every invocation.
 - How a "harmless" prompt edit breaks golden messages, how a **regression gate** catches it, and how a **rollback** is just moving the alias.
+
+![M04 at a glance: measure prompt techniques → publish prompts as versions → wire them into a flow → release behind an alias with a regression gate](../assets/diagrams/m04_overview.svg)
 
 ## Before you start
 1. **Set up the environment** once, from the repository root (needs [uv](https://docs.astral.sh/uv/)):
@@ -37,11 +41,19 @@ In total the cells take about 1.5–2 minutes of compute; the 144-call cell (≈
 
 Each technique has its own grader. 4 techniques × 2 models × 18 messages = 144 calls, four at a time. The scorecard shows correct / 18 with a Wilson 95 % interval, input and output tokens, p50 latency, $ per 1,000 requests and the missed messages; a McNemar table compares each technique with zero-shot on the same model; a chart plots accuracy against cost.
 
+![Two divisions of labour: the model decides everything in text, or the model describes and code decides](../assets/diagrams/m04_describe_decide.svg)
+
 **What to look for:**
 - Few-shot is neither free nor automatically better: two of the six examples are CLARIFY, and that shifts Nova Micro towards asking for an order number when it should not. Examples are part of the prompt and need the golden set as much as the wording does.
 - Chain-of-thought costs about three times as much as zero-shot and does not win here.
 - The structured technique splits the work: the model reads, code decides. Rules in code are deterministic, testable and auditable — the same `decide()` runs in the flow's Lambda in §3.
 - Read the interval and the McNemar column, not the accuracy column: with 18 messages almost no difference is significant. That is the argument for larger evaluations (module 9).
+
+**Key code to read:**
+- The line above `TOPICS` in the prompt cell: one shared core of definitions and rules, with only the technique-specific addition differing per arm.
+- The tool schema (the dispute definition lives in a field's `description`, which the model reads like prompt text), the rules inside `decide()` and the `assert`s that unit-test those rules before any model call.
+- In `triage()`, the forced `toolChoice`, the read-out of the tool's arguments handed to `decide()`, and the grader line — chain-of-thought takes the *last* label in the text, the other techniques the first word.
+- In `run_case`, a throttled call is recorded as a wrong answer rather than a crash, so the scorecard shows it.
 
 **Expect (several runs):**
 - 144 calls in ≈ 22–32 s.
@@ -67,6 +79,12 @@ More questions in the notebook: is a miss in the structured technique a model er
 - **A numbered version keeps only the default variant.** Variants are a DRAFT-time experiment: compare, choose, then freeze. That is why the comparison reads the DRAFT, and why Converse with a version ARN runs the default variant.
 - Nova Micro scores the same as Nova Lite on 18 messages at about half the price. Would you switch on that evidence?
 
+**Key code to read:**
+- In `variant()`, the model and inference settings travel with the template and its declared variables.
+- In `publish_prompt`, the hash of the variants (the content address) and `create_prompt_version`, which runs only when that content is new.
+- The Converse call with `modelId` set to the prompt version ARN plus `promptVariables` — and no messages.
+- In the variant comparison, `get_prompt` with and without `promptVersion`: the DRAFT versus the frozen version.
+
 **Expect:**
 - A version ARN of the form `arn:aws:bedrock:us-east-1:<ACCOUNT>:prompt/<id>:1`.
 - Converse on the angry three-topic message returns JSON with three topics, `disputes_payment: true` and `ORD-48810` → route BILLING, ≈ 205–210 input tokens.
@@ -85,11 +103,21 @@ More questions in the notebook: if the cheaper variant scores the same on 18 mes
 5. `invoke()` calls the alias with `enableTrace=True`; `show_trace()` prints every node's input and output, the condition that fired and, for each prompt node, the Converse call with **token usage**.
 6. Sends three test inputs (a simple billing request, an angry message with three requests, a dispute with no order number) and checks each specialist answer with a **validator in code** against the business rule "a refund above 100 USD must escalate".
 
+![The support flow: Start → Triage prompt → DecideAndCRM Lambda → Route condition → specialist prompts → outputs](../assets/diagrams/m04_flow_graph.svg)
+
 **What to look for:**
 - The definition is something you can diff and review in a pull request; the canvas in Part 2 is a drawing of this JSON.
 - Applications call the alias, never the draft or a version number — that is what makes the rollback in §4 a pointer move.
 - The trace is your quality log: the prompt nodes' Converse calls carry token usage, so you get cost per request without extra instrumentation. The flow calls Converse with the prompt version ARN — the same call as in §2.
 - Valid JSON is not the same as a correct answer; the validator is what checks the business rule.
+
+**Key code to read:**
+- In `deploy_lambda`, update-if-exists-else-create and the wait until the new code is live — safe to re-run.
+- In the Lambda's `handler`, the contract: node inputs in, an object with `label`, `facts` and `briefing` out.
+- In `prompt_node`, `promptArn` set to a version ARN from the catalog; in `route` and `flow_definition`, the conditional connection and the `Route` node reading the Lambda's label.
+- `flow_role_policy`: permission on the inference profile *and* on the foundation model it routes to.
+- In `publish_flow`, `add_permission` with `SourceArn` (the Lambda trusts only this flow), `prepare_flow` (graph errors surface here) and `create_flow_version` (an immutable snapshot); in `point_alias`, the single call that moves the pointer.
+- In `_invoke`, `enableTrace=True`, the branch that records which condition fired, and the token-usage sum that gives cost per request; in `business_check`, the `refund_usd > 100` rule checked in code.
 
 **Expect:**
 - `prepare_flow` ready after 0–2 s; alias `live` → 1 in ≈ 0.35–0.5 s.
@@ -109,11 +137,15 @@ More questions in the notebook: the routing rules run in a Lambda, not in the tr
 3. **The regression gate:** the same golden set through the new release. Non-regression rule: no golden message that the previous version routed correctly may break, and no new business-rule violations.
 4. **Rollback:** move `live` back to flow version 1; the bad version stays for the post-mortem.
 
+![Release, gate, roll back: the alias moves to a new version, the golden set runs, a failed gate moves the alias back](../assets/diagrams/m04_release_alias.svg)
+
 **What to look for:**
 - The baseline already has rule violations: message #13 is a simple "thank you" from Sam, and the specialist refunds 240 USD because the CRM briefing mentions a duplicate payment. Whatever you put into a prompt's context acts as an instruction, intended or not. The validator catches it; the fix would go through this same gate.
 - The trimmed prompt halves the triage tokens, but the whole request gets only ≈ 15 % cheaper, because the specialist prompts dominate. And the definitions it dropped were doing real work.
 - A broken golden message is a stop on its own — significance tests are for sampled production traffic, not for a curated set.
 - Better than rolling back: never move `live` first. A `staging` alias plus this gate in CI catches the regression before customers see it.
+
+**Key code to read:** in `golden_through_flow`, the route taken from *which Output node answered* (the trace, not the model's words); in the release cell, `publish_flow` followed by the alias move — `live` changes before any test runs, which is the deliberate mistake; in the gate, the per-message list of what broke (right before, wrong now) and `GATE_PASSED`; in the rollback cell, `point_alias(V_GOOD)` — the whole rollback is one call, followed by a probe that proves it.
 
 **Expect (several runs):**
 - Baseline: **18/18** routes; rule violations at **#13** (every run) and sometimes **#17** (a deductible question, also from Sam); ≈ $0.053 per 1k requests.
@@ -126,6 +158,26 @@ More questions in the notebook: the routing rules run in a Lambda, not in the tr
 
 **Think about it:** The bad release reached `live` before the gate ran. Change the order: what would a `staging` alias plus this gate look like in your CI/CD pipeline?
 More questions in the notebook: if the trimmed prompt saves about half the triage tokens, at what traffic does that pay for a golden-set run on every change? Which words in the v1 definitions were doing the work?
+
+## Going deeper
+- **Why forced tool use for Nova.** Asking for "JSON only" in the prompt mostly works, but models sometimes add code fences or prose. With `toolChoice` naming a specific tool, the answer arrives as a `toolUse` block whose `input` the API has already parsed. The schema's `enum` and `description` fields act like prompt text — that is where the structured arm keeps the dispute definition. A flow's Prompt node returns text, so §2 and §3 go back to JSON in text plus a tolerant parser in the Lambda.
+- **Prompt versions and variants.** `CreatePromptVersion` snapshots the DRAFT; in testing, the snapshot kept only the default variant (the notebook prints this). Versions cannot be edited, only deleted, and `DeletePrompt` without a version number removes the prompt with all its versions. A prompt version ARN can serve as the `modelId` of Converse or ConverseStream, with `promptVariables` filling the `{{…}}` placeholders.
+- **Flow lifecycle.** `UpdateFlow` replaces the DRAFT definition; `PrepareFlow` validates it (types, unconnected inputs, expressions) and must succeed before `CreateFlowVersion` can snapshot it. An alias's `routingConfiguration` names one flow version. The built-in test alias `TSTALIASID` always targets the DRAFT — that is what the console's test pane runs.
+- **What the trace contains.** With `enableTrace=True`, `nodeActionTrace` events show each prompt node's Converse request and response with token usage, and each Lambda invocation — enough to attribute cost and latency per request without extra logging. For analysis across a whole fleet, use model invocation logging and CloudWatch (module 8).
+- **IAM for an inference profile.** Calling through `us.amazon.nova-lite-v1:0` needs `bedrock:InvokeModel` on the inference-profile ARN *and* on the foundation-model ARN in every Region the profile can route to — hence the wildcard Region in the policy.
+- **Flows, Step Functions or an agent?** Flows fit prompt-centric graphs built from Bedrock-native nodes with versioned aliases; Step Functions fits long-running workflows across many services, including human approval steps; an agent framework fits control flow decided by the model (module 5).
+
+## Questions to check your understanding
+1. Nova Lite zero-shot scored 18/18 — why not let the triage prompt apply the routing rules?
+   <details><summary>Answer</summary>That result holds for these 18 messages on this model. Rules in code give the same answer every time, can be unit-tested and audited, and survive a model change — §1 shows the smaller model applying the same rules much less reliably.</details>
+2. Can a flow alias split traffic between two versions for an A/B test?
+   <details><summary>Answer</summary>No — its <code>routingConfiguration</code> accepts exactly one version. Split traffic in front of the flow (for example with AppConfig feature flags or in the API layer) across two aliases, and log which version served each request.</details>
+3. Are 18 golden messages enough for a release gate?
+   <details><summary>Answer</summary>For a <em>non-regression</em> gate, yes: each message is a signed-off requirement, and one that breaks stops the release. To show that a new prompt is better on average, no — that needs a larger sampled evaluation (module 9).</details>
+4. Where should this gate run?
+   <details><summary>Answer</summary>In the pipeline that publishes the new prompt version: run the golden set against a <code>staging</code> alias and move <code>live</code> only if the gate passes.</details>
+5. What happens if the CRM Lambda fails in the middle of a flow?
+   <details><summary>Answer</summary>The invocation ends with an error in the response stream and no output document; nothing in this flow retries. Retry in the caller (as <code>invoke()</code> does for IAM delays), or have the Lambda return an error field and route it with a condition node to a fallback reply.</details>
 
 ## Part 2 — the same in the console
 The same release cycle in the Amazon Bedrock console. It uses the notebook's resources: **run every cell above Cleanup first; don't use Run All** (≈ 1.5 min). After the notebook, the flow's DRAFT and the triage prompt's DRAFT contain the *trimmed* version 2 prompt, and alias `live` points to flow version 1. Region: us-east-1.

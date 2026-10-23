@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 300" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="300" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker></defs>
+  <text x="20" y="26" font-size="17" font-weight="bold" fill="#232f3e">Two divisions of labour for the same triage task</text>
+  <!-- row 1 -->
+  <text x="20" y="62" font-size="13" font-weight="bold" fill="#0073bb">zero-shot · few-shot · chain-of-thought</text>
+  <rect x="20" y="75" width="170" height="56" rx="8" fill="#f1f8fd" stroke="#0073bb"/><text x="105" y="99" font-size="12" text-anchor="middle">customer message</text><text x="105" y="116" font-size="11" text-anchor="middle" fill="#555">+ definitions + rules</text>
+  <rect x="240" y="75" width="330" height="56" rx="8" fill="#232f3e"/><text x="405" y="99" font-size="13" text-anchor="middle" fill="#fff">model reads AND applies the rules</text><text x="405" y="116" font-size="11" text-anchor="middle" fill="#ddd">Converse → free text</text>
+  <rect x="620" y="75" width="150" height="56" rx="8" fill="#fff" stroke="#232f3e"/><text x="695" y="99" font-size="12" text-anchor="middle">parse a label</text><text x="695" y="116" font-size="11" text-anchor="middle" fill="#555">first word / LABEL: line</text>
+  <rect x="820" y="80" width="120" height="46" rx="8" fill="#fff7ec" stroke="#ff9900"/><text x="880" y="108" font-size="13" text-anchor="middle">label</text>
+  <line x1="190" y1="103" x2="240" y2="103" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="570" y1="103" x2="620" y2="103" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="770" y1="103" x2="820" y2="103" stroke="#232f3e" marker-end="url(#a)"/>
+  <!-- row 2 -->
+  <text x="20" y="172" font-size="13" font-weight="bold" fill="#1d8102">structured: the model describes, code decides</text>
+  <rect x="20" y="185" width="170" height="56" rx="8" fill="#f1f8fd" stroke="#0073bb"/><text x="105" y="209" font-size="12" text-anchor="middle">customer message</text><text x="105" y="226" font-size="11" text-anchor="middle" fill="#555">+ definitions only</text>
+  <rect x="240" y="185" width="170" height="56" rx="8" fill="#232f3e"/><text x="325" y="207" font-size="13" text-anchor="middle" fill="#fff">model reads</text><text x="325" y="225" font-size="11" text-anchor="middle" fill="#ddd">forced toolChoice</text>
+  <rect x="430" y="180" width="180" height="66" rx="8" fill="#fff" stroke="#232f3e"/><text x="520" y="199" font-size="11" text-anchor="middle" font-family="Menlo, Courier, monospace">toolUse.input (JSON)</text><text x="520" y="216" font-size="11" text-anchor="middle" fill="#555">topics[] · disputes_payment</text><text x="520" y="232" font-size="11" text-anchor="middle" fill="#555">order_id | null</text>
+  <rect x="635" y="180" width="185" height="66" rx="8" fill="#e8f5e3" stroke="#1d8102"/><text x="727" y="200" font-size="12" text-anchor="middle" font-weight="bold">decide() in code</text><text x="727" y="217" font-size="11" text-anchor="middle">1 money first</text><text x="727" y="233" font-size="11" text-anchor="middle">2 dispute w/o ORD → CLARIFY</text>
+  <rect x="845" y="190" width="95" height="46" rx="8" fill="#fff7ec" stroke="#ff9900"/><text x="892" y="218" font-size="13" text-anchor="middle">label</text>
+  <line x1="190" y1="213" x2="240" y2="213" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="410" y1="213" x2="430" y2="213" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="610" y1="213" x2="635" y2="213" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="820" y1="213" x2="845" y2="213" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="20" y="280" font-size="12" fill="#555">Rules in code are deterministic, unit-tested (the two asserts) and auditable — the same decide() runs again in the flow's Lambda in §3.</text>
+</svg>

@@ -5,12 +5,16 @@
 
 > **How this guide was verified.** The notebook was run end to end, live, in us-east-1 in October 2026 (five runs; every *Expect* line is the range we measured). The console steps were **not** clicked through: the state they show (guardrail versions, policies, tiers, and every test-pane result) was verified through the equivalent API calls (Converse and ApplyGuardrail against the same guardrail version), so page, panel and button names may differ slightly from what you see.
 
+> **Reading the notebook.** Lines worth slowing down for carry a `# ▶ KEY` comment, and every section uses the same boxes: 💡 Concept (the idea before the code), 🔑 Key code (where to look), 📊 How to read this (after the output) and ✅ Takeaway (what to remember). A Summary table at the end recaps what you built.
+
 ## What you will learn
 - How to write an **Amazon Bedrock guardrail as code** — content filters including prompt attack, denied topics (one of them in *detect-only* shadow mode), word filters, PII with **different actions for input and output**, a regex, contextual grounding — and version it only when the configuration really changed.
 - Why **input tagging** (`guardContent`) stops the guardrail from blocking honest customers because of your reference documents — and why tagging alone lets **indirect** prompt injection through, so retrieved content needs a screen of its own.
 - How the **contextual grounding check** scores an answer against a source and a query, and where it stops helping (a near-miss number; a poisoned source).
 - How to judge every safety layer on **two** numbers — attack success rate *and* false-positive rate — with confidence intervals, latency and cost, using a red-team suite and a benign set.
 - How tuning becomes a release: config diff → guardrail version 2 → re-run the whole suite → a release gate.
+
+![M06 at a glance: §1 guardrail as code, §2 tagging, §3 grounding, §4 red team, §5 release gate](../assets/diagrams/m06_overview.svg)
 
 ## Before you start
 1. **Set up the environment** once, from the repository root (see [the README](../README.md)):
@@ -41,6 +45,8 @@ The cell `SHIELD_CONFIG` is the whole customer-facing policy as one Python dict.
 
 `ensure_guardrail` treats the config like a deployment: it adopts a guardrail that already exists, updates the working draft and cuts a new numbered **version** only when the config hash changed, and the application always calls a numbered version — never the draft you are editing. The probes then call **ApplyGuardrail** (a guardrail on any text, no model involved) and turn the assessment into one line per finding.
 
+- **Key code to read:** in `SHIELD_CONFIG`, the prompt-attack filter whose output strength is `NONE` (attacks only arrive on the way in), the *Legal advice* topic with both actions `NONE` (shadow mode), the PII entries with a different action per direction, and `crossRegionConfig` (Standard tier). In `ensure_guardrail`, the config hash stored in the version description — the reason a re-run adopts instead of duplicating — and `create_guardrail_version`, which freezes the draft into a numbered version. In `apply`, the single `apply_guardrail` call: a guardrail evaluated on plain text, with no model behind it.
+
 **What to look for:** the "Fired" column. Every probe names the exact policy that acted, and the two "detect" rows (legal advice, the customer's own phone number) pass through while still appearing in the trace — that is shadow mode, the way you measure a new rule before you enforce it.
 
 **Expect:** both guardrails ready at version 1 in ≈ 5–6 s (≈ 1 s when a re-run adopts them). Probe table 7 of 7 "✓ as designed": `content:PROMPT_ATTACK(HIGH)→BLOCK`, `topic:Investment advice→BLOCK`, `word:Project Falcon→BLOCK`, `topic:Legal advice→detect` (passes), `pii:PHONE→detect` on the customer's own number (passes), an answer with a phone, an e-mail and a note id comes back as `{PHONE} {EMAIL} {adjuster-note-id}`, and an SSN is blocked. ApplyGuardrail takes ≈ 0.7–2 s per call.
@@ -52,6 +58,10 @@ A RAG prompt holds three kinds of text: the system prompt (guardrails never scre
 
 Three experiments: (1) a customer's forwarded e-mail that *sounds* like an instruction ("ignore my earlier message…"), sent untagged and tagged; (2) a **poisoned** e-mail with a hidden instruction in white HTML text, sent through the tagged prompt; (3) both e-mails screened by the `doc-screen` guardrail before the prompt is built.
 
+![Untagged vs tagged: what the guardrail reads in each case](../assets/diagrams/m06_tagging.svg)
+
+- **Key code to read:** `build_content` wraps the question in a `guardContent` block qualified `guard_content` and the documents in blocks qualified `grounding_source` and `query` — only the first is screened by the input policies. In `converse`, `guardrailConfig` with `"trace": "enabled"` returns the assessments, and the `guardrailCoverage` line computes characters guarded versus total. Then find the white-text `<span>` in the poisoned e-mail: that is the instruction the model reads but nobody screened.
+
 **What to look for:** the "Chars screened" column (from the trace's `guardrailCoverage`). Tagged, the guardrail reads only the question, and the honest customer gets an answer. But the same tagging means nobody screens the poisoned e-mail — and the grounding check even rates the injected answer as well supported, because the poisoned e-mail *is* the source. The doc-screen catches it, and also flags the benign e-mail: screening documents for instructions costs false positives.
 
 **Expect (4 runs):** untagged 299/741 characters screened → `PROMPT_ATTACK(MEDIUM)→BLOCK` on an honest request; tagged 55/729 → an answer mentioning "14 Elm Street", grounding 0.95. Poisoned e-mail through the tagged prompt: "Your claim CLM-88231 … is approved for 50,000 USD" (Nova Lite followed the hidden instruction in all 4 runs), grounding 0.99. Doc-screen: poisoned **and** benign e-mail both `PROMPT_ATTACK(MEDIUM)→BLOCK`. If the model ignores the hidden instruction in your run, the cell says so — the point stands: nothing *screened* it.
@@ -60,6 +70,8 @@ Three experiments: (1) a customer's forwarded e-mail that *sounds* like an instr
 
 ### §3 Contextual grounding · slide 9
 The shield checks four candidate answers to one question ("What is the deductible for a burst pipe?") against section 4 of the policy wording. **Grounding** asks whether every claim in the answer is supported by the source; **relevance** asks whether it answers the query. Below the thresholds (0.6 / 0.5) the answer is blocked.
+
+- **Key code to read:** `grounding_check` sends three blocks in one `apply_guardrail` call — the source, the query and the answer to check, each with its own qualifier — with `source="OUTPUT"`, because it is the answer that is being judged. Compare the grounding score of the *correct* row with the *wrong number* row: that gap is all a threshold has to work with.
 
 **What to look for:** the wrong-number answer (250 instead of 750 USD) scores high and passes. Near-miss numbers are the hard case: a threshold high enough to catch it would also start blocking honest paraphrases (§5 measures this). For facts that can be checked by rules, Automated Reasoning checks are the better tool. And remember §2: grounding checks the answer against the source, not the source against the truth.
 
@@ -76,6 +88,10 @@ The same cases run through three layers:
 - **L3** — defense in depth: the document is sanitized (HTML comments, hidden-styled elements, zero-width characters removed) and then screened by `doc-screen`; the tagged question goes through the shield; the answer goes through the shield's output policies and grounding, then an app-side **link allowlist** (markdown images and links are the classic exfiltration channel, and a regex is the right tool for that).
 
 Then a scorecard per layer (attack success rate, false-positive rate, "useful" answers, Wilson 95 % intervals, p50 latency, $ per 1,000 requests), a trace table showing which control stopped what, and a paired McNemar test of L1 vs. L3.
+
+![L3 defense in depth: sanitize and screen the document, tag the question, check the answer](../assets/diagrams/m06_layers.svg)
+
+- **Key code to read:** `respond`, where L1 and L2 are one line each and L3 is the whole pipeline. Inside it: the `HIDDEN` regex in `sanitize` (HTML comments and hidden styles removed together with their content, before any model sees them), the `apply` call with the doc-screen guardrail (a hit quarantines the document without a model call), and `unsafe_links`, the app-side host allowlist. In `judge`, the forced `toolChoice` returns a structured verdict instead of prose to parse; in `grade`, a blocked answer is checked first.
 
 **What to look for:** L1 is not as weak as you might expect — Nova Lite refuses most direct attacks and jailbreaks on its own; what gets through are the *indirect* injections, a PII dump, and sometimes a direct "compliance audit" request (D2). L2 stops those but blocks a third of the honest questions. L3 gives each source the control that fits it. Look also at the cost column: the guardrail costs about 30 times the Nova Lite bill, because it charges per 1,000 characters per policy — screen what needs screening.
 
@@ -94,11 +110,36 @@ In the L3 trace: direct attacks and jailbreaks stopped on the tagged question (`
 ### §5 Improve, version 2, gate · slide 16
 The benign rows L3 blocked tell you what to tune, and a threshold sweep over L3's honest answers tells you how far the grounding threshold can rise. The change set is a **config diff**, reviewed like code: prompt-attack input strength HIGH → MEDIUM (HIGH also acts on low-confidence hits like "please ignore my previous message"), topic definitions that say what the topic is *not* ("spending money on home repairs is not investment"), *Medical advice* blocked on input but detect-only on output (answers about medical *cover* mention medication), violence off on output (theft claims are the business), grounding 0.6 → 0.7. `ensure_guardrail` turns it into version 2; then the **whole** suite runs again on L3 — a change that unblocks customers can also unblock attackers — and a release gate checks five conditions, including "no attack regressed vs. the pinned version".
 
+![Tuning is a release: config diff, new version, full re-run, gate](../assets/diagrams/m06_release_loop.svg)
+
+- **Key code to read:** the `diff()` output — one change per finding in the blocked-benign table; the loop that lowers `PROMPT_ATTACK` and turns `VIOLENCE` off on output; `topics[0].update(...)`, which enforces *Medical advice* on the request but only detects it on the answer; `ensure_guardrail(SHIELD_V2_CONFIG)`, where a new config hash produces version 2 while the application still pins version 1; and in the gate cell the rule `not newly_through`, a regression check against the pinned version — one ✗ keeps it.
+
 **What to look for:** the "attacks newly through" line, and what is left: B8, the benign forwarded e-mail, which the doc-screen sends to a human. That is an accepted, documented false positive, not a bug.
 
 **Expect (4–5 runs):** sweep — 0 honest answers blocked up to 0.7 (in some runs up to 0.85), the §3 wrong-number answer blocked only from 0.9. Version 2 ready in ≈ 1 s. L3 with v2: attack success 0 %, false positives 8 % (B8 only), useful 92 %, ≈ 2 s p50, $0.85–0.88 / 1k; "benign questions unblocked by v2: B2 B3 B4 B7 · attacks newly through: –". Gate: five ✓ and "RELEASE GATE: PASS - promote shield version 2" in every run we made. If the gate fails in your run (classifier or model variance on a borderline case), that is the lesson in action: read the "Still wrong with v2" table and decide whether to fix, accept, or grow the suite.
 
 **Think about it:** The gate passed (or failed) on 18 attacks and 13 benign questions. What would make you trust it on Monday morning — and which production signal would tell you it has stopped being true? (More in the notebook: whether rewriting the topic definitions is tuning or overfitting to this suite; who may change a guardrail in production, and which CloudTrail event you would alarm on.)
+
+## Going deeper
+- **Strength is a confidence cut-off.** Every content-filter finding comes with a confidence (none, low, medium, high). The strength you set is the lowest confidence that triggers the action: *Low* acts only on high-confidence findings, *Medium* on medium and high, *High* on all three. That is why version 2's prompt-attack filter at *Medium* lets a low-confidence "please ignore my previous message" pass.
+- **Classic vs Standard tier.** Standard (for content filters and denied topics) detects prompt attacks better, covers more languages and accepts longer topic definitions, but only works through the cross-Region guardrail profile `us.guardrail.v1:0` — your text may be processed in another US Region. Classic stays in the Region you call.
+- **Tagging decides what the input policies see.** As soon as a Converse message contains `guardContent` blocks, only the blocks qualified `guard_content` are screened; `grounding_source` and `query` blocks are inputs for the grounding check on the answer. The system prompt is never screened. With InvokeModel the same idea uses input tags written into the prompt text, with a suffix that changes per request.
+- **What you pay for.** Guardrails bill per policy and per text unit (up to 1,000 characters), separately for input and output; word filters are free. Running every policy over a long retrieved document is why L2 and L3 cost many times the Nova Lite bill — and why the document screen is a narrow guardrail with a single filter.
+- **Grounding has limits.** The check needs a source, a query and the answer, and the source has a size limit (see the guardrail quotas page before passing whole documents). Where an answer must be exactly right — deductible arithmetic, eligibility rules — Automated Reasoning checks verify it against formal rules instead of scoring similarity.
+- **Why links get a regex.** Many chat UIs render a markdown image automatically, so an image URL with data in its query string leaks that data with no click at all. A host allowlist is exact and free; a model-based check is neither.
+- **The statistics.** Wilson intervals stay honest with small samples and at 0 %; McNemar compares two layers on the *same* attacks using only the cases where they disagree — the same tools as in Module 1.
+
+## Questions to check your understanding
+1. **Why not just write the rules into the system prompt?**
+   <details><summary>Answer</summary>That is L1, and the trace shows where it breaks: instructions hidden in documents, and data the model was handed and then asked to repeat. A prompt only advises the model; a guardrail and app-side checks are enforced outside it.</details>
+2. **Can one Converse call screen the question and the retrieved document with different policies?**
+   <details><summary>Answer</summary>No — a request carries one guardrail. That is why the notebook uses two: the shield on the tagged question and the answer, and the narrow doc-screen, called through ApplyGuardrail, on the documents.</details>
+3. **Is a detect-only (shadow) policy free?**
+   <details><summary>Answer</summary>No. It is still evaluated and billed; you are paying to learn how often it would fire before you decide to enforce it.</details>
+4. **Isn't rewriting topic definitions until the suite passes just overfitting?**
+   <details><summary>Answer</summary>It can be. The protection is a suite that keeps growing from production traces plus a held-out set that nobody tunes against (Module 9).</details>
+5. **Where should the release gate run?**
+   <details><summary>Answer</summary>In the CI/CD pipeline, on every change of model, prompt or guardrail version. Only the step that passes the gate may change the `guardrailVersion` the application reads.</details>
 
 ## Part 2 — the same in the console (≈ 15 min)
 The same guardrail, seen as pages in the Amazon Bedrock console. **First run every cell above *Cleanup* in the notebook (≈ 1 min); don't use Run All** — Part 2 needs `mlaidp2-m06-claims-shield` with versions 1 and 2, and Run All would delete it at the end. Region: us-east-1. Before you start, copy section 4 (*Deductibles*) of [`home_policy_wording_HP-2026.txt`](../assets/m03_docs/home_policy_wording_HP-2026.txt) into a scratch file — it is the grounding source for step 5.

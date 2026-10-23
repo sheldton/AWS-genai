@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 410" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="410" fill="#ffffff"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1d8102"/></marker>
+  </defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">pseudonymize() — deny by default, explicit exceptions, reversible tokens</text>
+
+  <!-- source + comprehend -->
+  <rect x="20" y="60" width="180" height="56" rx="6" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="110" y="83" font-size="13" text-anchor="middle" font-weight="bold">Text source</text>
+  <text x="110" y="101" font-size="11" text-anchor="middle" fill="#555">email · call transcript</text>
+  <rect x="235" y="60" width="200" height="56" rx="6" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="335" y="80" font-size="13" text-anchor="middle" font-weight="bold">Comprehend</text>
+  <text x="335" y="96" font-size="11" text-anchor="middle" fill="#555">DetectPiiEntities → per entity:</text>
+  <text x="335" y="110" font-size="11" text-anchor="middle" fill="#555">Type · Score · offsets (no text)</text>
+  <line x1="200" y1="88" x2="235" y2="88" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="435" y1="79" x2="470" y2="79" stroke="#232f3e" marker-end="url(#a)"/>
+
+  <!-- checks -->
+  <rect x="470" y="60" width="240" height="38" rx="6" fill="#fff" stroke="#232f3e"/>
+  <text x="590" y="84" font-size="12" text-anchor="middle">Type in KEEP_TYPES (DATE_TIME)?</text>
+  <rect x="470" y="118" width="240" height="38" rx="6" fill="#fff" stroke="#232f3e"/>
+  <text x="590" y="142" font-size="12" text-anchor="middle">Value matches BUSINESS_KEYS?</text>
+  <rect x="470" y="176" width="240" height="38" rx="6" fill="#fff" stroke="#232f3e"/>
+  <text x="590" y="200" font-size="12" text-anchor="middle">Already a [placeholder]?</text>
+  <rect x="470" y="234" width="240" height="38" rx="6" fill="#fff" stroke="#232f3e"/>
+  <text x="590" y="258" font-size="12" text-anchor="middle">Score below PII_THRESHOLD (0.5)?</text>
+  <line x1="590" y1="98" x2="590" y2="118" stroke="#232f3e" marker-end="url(#a)"/><text x="598" y="112" font-size="10" fill="#555">no</text>
+  <line x1="590" y1="156" x2="590" y2="176" stroke="#232f3e" marker-end="url(#a)"/><text x="598" y="170" font-size="10" fill="#555">no</text>
+  <line x1="590" y1="214" x2="590" y2="234" stroke="#232f3e" marker-end="url(#a)"/><text x="598" y="228" font-size="10" fill="#555">no</text>
+  <line x1="590" y1="272" x2="590" y2="292" stroke="#232f3e" marker-end="url(#a)"/><text x="598" y="286" font-size="10" fill="#555">no</text>
+
+  <!-- keep box -->
+  <rect x="750" y="60" width="190" height="212" rx="8" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="845" y="50" font-size="12" text-anchor="middle" font-weight="bold" fill="#1d8102">kept in the text</text>
+  <text x="845" y="84" font-size="11" text-anchor="middle">type needed</text>
+  <text x="845" y="142" font-size="11" text-anchor="middle">business key (policy no.)</text>
+  <text x="845" y="200" font-size="11" text-anchor="middle">already a placeholder</text>
+  <text x="845" y="258" font-size="11" text-anchor="middle">low score</text>
+  <line x1="710" y1="79" x2="750" y2="79" stroke="#1d8102" marker-end="url(#g)"/><text x="722" y="73" font-size="10" fill="#1d8102">yes</text>
+  <line x1="710" y1="137" x2="750" y2="137" stroke="#1d8102" marker-end="url(#g)"/><text x="722" y="131" font-size="10" fill="#1d8102">yes</text>
+  <line x1="710" y1="195" x2="750" y2="195" stroke="#1d8102" marker-end="url(#g)"/><text x="722" y="189" font-size="10" fill="#1d8102">yes</text>
+  <line x1="710" y1="253" x2="750" y2="253" stroke="#1d8102" marker-end="url(#g)"/><text x="722" y="247" font-size="10" fill="#1d8102">yes</text>
+
+  <!-- replace -->
+  <rect x="470" y="292" width="240" height="48" rx="6" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="590" y="312" font-size="13" text-anchor="middle" font-weight="bold">replace with [TYPE_n]</text>
+  <text x="590" y="329" font-size="11" text-anchor="middle" fill="#555">same value → same token</text>
+  <rect x="750" y="292" width="190" height="48" rx="6" fill="#fdecea" stroke="#d13212"/>
+  <text x="845" y="312" font-size="13" text-anchor="middle" font-weight="bold">vault</text>
+  <text x="845" y="329" font-size="11" text-anchor="middle" fill="#555">[NAME_1] → real value</text>
+  <line x1="710" y1="316" x2="750" y2="316" stroke="#232f3e" marker-end="url(#a)"/>
+
+  <!-- safe text to model -->
+  <rect x="235" y="292" width="200" height="48" rx="6" fill="#232f3e"/>
+  <text x="335" y="312" font-size="12" text-anchor="middle" fill="#fff">safe text → Bedrock Converse</text>
+  <text x="335" y="329" font-size="11" text-anchor="middle" fill="#fff">model sees tokens only</text>
+  <line x1="470" y1="316" x2="435" y2="316" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="452" y="360" font-size="10" text-anchor="middle" fill="#555">splice right → left</text>
+  <text x="452" y="372" font-size="10" text-anchor="middle" fill="#555">(offsets stay valid)</text>
+
+  <!-- detokenize -->
+  <rect x="750" y="360" width="190" height="40" rx="6" fill="#fff" stroke="#d13212"/>
+  <text x="845" y="377" font-size="12" text-anchor="middle">detokenize()</text>
+  <text x="845" y="392" font-size="11" text-anchor="middle" fill="#555">privileged · after the model</text>
+  <line x1="845" y1="340" x2="845" y2="360" stroke="#232f3e" marker-end="url(#a)"/>
+  <polyline points="335,340 335,380 750,380" fill="none" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="560" y="394" font-size="10" text-anchor="middle" fill="#555">extracted record with [NAME_1]</text>
+  <text x="20" y="160" font-size="11" fill="#555">Leak assertion after the step:</text>
+  <text x="20" y="176" font-size="11" fill="#555">no vault value may appear</text>
+  <text x="20" y="192" font-size="11" fill="#555">in any text model input.</text>
+  <text x="20" y="224" font-size="11" fill="#d13212">Images are not covered:</text>
+  <text x="20" y="240" font-size="11" fill="#d13212">Comprehend reads text, not pixels.</text>
+</svg>

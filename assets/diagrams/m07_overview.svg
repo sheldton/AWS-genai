@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 380" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="380" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker></defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">M07 at a glance — one lever per factor of the bill, each one measured</text>
+  <!-- formula -->
+  <rect x="20" y="48" width="920" height="46" rx="8" fill="#232f3e"/>
+  <text x="480" y="78" font-size="17" text-anchor="middle" fill="#fff"><tspan font-weight="bold">monthly bill</tspan>  =  <tspan fill="#ff9900" font-weight="bold">requests</tspan>  ×  <tspan fill="#7cc4f2" font-weight="bold">tokens per request</tspan>  ×  <tspan fill="#9fdc8c" font-weight="bold">price per token</tspan></text>
+  <!-- three factor columns -->
+  <rect x="20" y="115" width="290" height="160" rx="10" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="35" y="138" font-size="14" font-weight="bold" fill="#c66c00">Requests</text>
+  <text x="35" y="162" font-size="13" font-weight="bold">§5 Semantic cache</text>
+  <text x="35" y="180" font-size="11" fill="#555">Titan V2 embeddings · cosine threshold</text>
+  <text x="35" y="195" font-size="11" fill="#555">scoped keys (tenant, doc version, entities)</text>
+  <text x="35" y="210" font-size="11" fill="#555">sweep precision / recall on 1,431 pairs</text>
+  <text x="35" y="236" font-size="11" fill="#d13212">failure mode: a look-alike question</text>
+  <text x="35" y="251" font-size="11" fill="#d13212">gets someone else's answer</text>
+
+  <rect x="335" y="115" width="290" height="160" rx="10" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="350" y="138" font-size="14" font-weight="bold" fill="#0073bb">Tokens per request</text>
+  <text x="350" y="162" font-size="13" font-weight="bold">§2 Long-chat compaction</text>
+  <text x="350" y="180" font-size="11" fill="#555">full history · sliding window ·</text>
+  <text x="350" y="195" font-size="11" fill="#555">window + summary · window + pinned turns</text>
+  <text x="350" y="210" font-size="11" fill="#555">input tokens per chat, recall of turn 2</text>
+  <text x="350" y="236" font-size="11" fill="#d13212">failure mode: the window forgets the</text>
+  <text x="350" y="251" font-size="11" fill="#d13212">policy number — and may invent one</text>
+
+  <rect x="650" y="115" width="290" height="160" rx="10" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="665" y="138" font-size="14" font-weight="bold" fill="#1d8102">Price per token</text>
+  <text x="665" y="160" font-size="13" font-weight="bold">§1 Prompt caching (cachePoint)</text>
+  <text x="665" y="176" font-size="11" fill="#555">cache reads at ¼ of the input price on Nova</text>
+  <text x="665" y="198" font-size="13" font-weight="bold">§3 Model cascade</text>
+  <text x="665" y="214" font-size="11" fill="#555">cheap model first, escalate on disagreement</text>
+  <text x="665" y="236" font-size="11" fill="#d13212">failure modes: prefix outside the cacheable</text>
+  <text x="665" y="251" font-size="11" fill="#d13212">range · a cascade dearer than the reference</text>
+
+  <line x1="165" y1="94" x2="165" y2="115" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="480" y1="94" x2="480" y2="115" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="795" y1="94" x2="795" y2="115" stroke="#232f3e" marker-end="url(#a)"/>
+  <!-- bottom row -->
+  <rect x="20" y="295" width="450" height="70" rx="10" fill="#ffffff" stroke="#232f3e"/>
+  <text x="35" y="318" font-size="13" font-weight="bold">§4 Latency — a separate lever from cost</text>
+  <text x="35" y="336" font-size="11" fill="#555">TTFT ≈ prefill (flat) · total ≈ TTFT + output tokens ÷ tokens/s</text>
+  <text x="35" y="352" font-size="11" fill="#555">serviceTier per request: priority · default · flex (≈ ½ price) + fallback</text>
+  <rect x="490" y="295" width="450" height="70" rx="10" fill="#ffffff" stroke="#232f3e"/>
+  <text x="505" y="318" font-size="13" font-weight="bold">§6 Put it together</text>
+  <text x="505" y="336" font-size="11" fill="#555">monthly waterfall from the measured $ · peak RPM / TPM vs Service Quotas</text>
+  <text x="505" y="352" font-size="11" fill="#555">CloudWatch dashboard (AWS/Bedrock metrics) — opened in Part 2</text>
+</svg>

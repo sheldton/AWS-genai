@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 360" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="360" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker>
+        <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d13212"/></marker></defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">Quality as a metric — and the way back from the alarm to the prompt</text>
+
+  <!-- row 1: forward path -->
+  <rect x="20" y="60" width="160" height="80" rx="8" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="100" y="83" font-size="13" font-weight="bold" text-anchor="middle" fill="#0073bb">Converse</text>
+  <text x="100" y="102" font-size="11" text-anchor="middle">Nova Lite answers</text>
+  <text x="100" y="118" font-size="11" text-anchor="middle">prompt_version v1 / v2</text>
+
+  <rect x="210" y="60" width="170" height="80" rx="8" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="295" y="83" font-size="13" font-weight="bold" text-anchor="middle" fill="#c66c00">ApplyGuardrail</text>
+  <text x="295" y="102" font-size="11" text-anchor="middle">source + query + answer</text>
+  <text x="295" y="118" font-size="11" text-anchor="middle">→ grounding 0…1</text>
+
+  <rect x="410" y="60" width="170" height="80" rx="8" fill="#fff" stroke="#232f3e"/>
+  <text x="495" y="83" font-size="13" font-weight="bold" text-anchor="middle" fill="#232f3e">EMF log line</text>
+  <text x="495" y="102" font-size="11" text-anchor="middle">GroundingScore, Ungrounded,</text>
+  <text x="495" y="118" font-size="11" text-anchor="middle">Answers + requestId</text>
+
+  <rect x="610" y="60" width="150" height="80" rx="8" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="685" y="83" font-size="13" font-weight="bold" text-anchor="middle" fill="#0073bb">CW metrics</text>
+  <text x="685" y="102" font-size="11" text-anchor="middle">MLAIDP2/M08</text>
+  <text x="685" y="118" font-size="11" text-anchor="middle">Feature [, PromptVersion]</text>
+
+  <rect x="790" y="60" width="150" height="80" rx="8" fill="#fdecea" stroke="#d13212"/>
+  <text x="865" y="83" font-size="13" font-weight="bold" text-anchor="middle" fill="#d13212">Alarm</text>
+  <text x="865" y="100" font-size="11" text-anchor="middle">IF(answers ≥ 5,</text>
+  <text x="865" y="114" font-size="11" text-anchor="middle">100·ungrounded/answers)</text>
+  <text x="865" y="128" font-size="11" text-anchor="middle">&gt; 20 for 1 minute</text>
+
+  <line x1="180" y1="100" x2="208" y2="100" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="380" y1="100" x2="408" y2="100" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="580" y1="100" x2="608" y2="100" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="594" y="155" font-size="11" text-anchor="middle" fill="#555">extracted at ingestion</text>
+  <line x1="760" y1="100" x2="788" y2="100" stroke="#232f3e" marker-end="url(#a)"/>
+
+  <!-- row 2: back path -->
+  <text x="20" y="200" font-size="13" font-weight="bold" fill="#d13212">On-call: from the page back to the cause</text>
+  <rect x="790" y="220" width="150" height="70" rx="8" fill="#fff" stroke="#d13212"/>
+  <text x="865" y="243" font-size="12" font-weight="bold" text-anchor="middle">1 · alarm fires</text>
+  <text x="865" y="262" font-size="11" text-anchor="middle">rate per minute</text>
+  <text x="865" y="277" font-size="11" text-anchor="middle">above 20 %</text>
+
+  <rect x="470" y="220" width="280" height="70" rx="8" fill="#fff" stroke="#d13212"/>
+  <text x="610" y="243" font-size="12" font-weight="bold" text-anchor="middle">2 · Logs Insights on the app log</text>
+  <text x="610" y="262" font-size="11" text-anchor="middle">filter Ungrounded = 1 … by PromptVersion</text>
+  <text x="610" y="277" font-size="11" text-anchor="middle">→ which version, which requestIds</text>
+
+  <rect x="120" y="220" width="310" height="70" rx="8" fill="#fff" stroke="#d13212"/>
+  <text x="275" y="243" font-size="12" font-weight="bold" text-anchor="middle">3 · invocation log: filter requestId in […]</text>
+  <text x="275" y="262" font-size="11" text-anchor="middle">strlen(system prompt), inputTokenCount</text>
+  <text x="275" y="277" font-size="11" text-anchor="middle">→ the policy text never reached the model</text>
+
+  <line x1="788" y1="255" x2="752" y2="255" stroke="#d13212" marker-end="url(#r)"/>
+  <line x1="468" y1="255" x2="432" y2="255" stroke="#d13212" marker-end="url(#r)"/>
+  <line x1="865" y1="140" x2="865" y2="218" stroke="#d13212" stroke-dasharray="4 3" marker-end="url(#r)"/>
+
+  <text x="20" y="330" font-size="12" fill="#232f3e">Metrics say <tspan font-weight="bold">that</tspan> something is wrong (cheap, alarmable); the log lines say <tspan font-weight="bold">which</tspan> answers; the invocation record says <tspan font-weight="bold">why</tspan>.</text>
+</svg>

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 330" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="330" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker><marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d13212"/></marker><marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1d8102"/></marker></defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">M05 at a glance — expose tools, guard them in the infrastructure, remember</text>
+  <!-- col 1 -->
+  <rect x="20" y="55" width="280" height="255" rx="10" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="35" y="80" font-size="14" font-weight="bold" fill="#0073bb">§0–§1 Tools behind a gateway</text>
+  <rect x="40" y="95" width="240" height="44" rx="6" fill="#fff" stroke="#0073bb"/><text x="160" y="114" font-size="13" text-anchor="middle">AWS Lambda: three tools</text><text x="160" y="130" font-size="11" text-anchor="middle" fill="#555">get_customer · get_quote · bind_policy</text>
+  <rect x="40" y="155" width="240" height="44" rx="6" fill="#fff" stroke="#0073bb"/><text x="160" y="174" font-size="13" text-anchor="middle">AgentCore Gateway (MCP)</text><text x="160" y="190" font-size="11" text-anchor="middle" fill="#555">target Underwriting · inbound SigV4</text>
+  <rect x="40" y="215" width="240" height="44" rx="6" fill="#fff" stroke="#0073bb"/><text x="160" y="234" font-size="13" text-anchor="middle">Raw JSON-RPC from the notebook</text><text x="160" y="250" font-size="11" text-anchor="middle" fill="#555">tools/list · tools/call · tool search</text>
+  <line x1="160" y1="139" x2="160" y2="155" stroke="#232f3e" marker-end="url(#a)"/><line x1="160" y1="199" x2="160" y2="215" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="160" y="290" font-size="12" text-anchor="middle" fill="#0073bb">output: one MCP endpoint, no agent yet</text>
+  <!-- col 2 -->
+  <rect x="340" y="55" width="360" height="255" rx="10" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="355" y="80" font-size="14" font-weight="bold" fill="#c66c00">§2–§3 Where does the guard live?</text>
+  <rect x="360" y="95" width="320" height="80" rx="6" fill="#fdecea" stroke="#d13212"/>
+  <text x="520" y="116" font-size="13" text-anchor="middle" font-weight="bold" fill="#d13212">§2 In the system prompt</text>
+  <text x="520" y="135" font-size="12" text-anchor="middle">injected broker note → agent binds above the limit</text>
+  <text x="520" y="153" font-size="11" text-anchor="middle" fill="#555">Strands agent × 2 models × 8 runs</text>
+  <text x="520" y="167" font-size="11" text-anchor="middle" fill="#555">attack success rate with Wilson 95 % CI</text>
+  <rect x="360" y="190" width="320" height="100" rx="6" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="520" y="211" font-size="13" text-anchor="middle" font-weight="bold" fill="#1d8102">§3 In a Cedar policy on the gateway</text>
+  <text x="520" y="230" font-size="12" text-anchor="middle">hand-written + generated from a sentence</text>
+  <text x="520" y="247" font-size="11" text-anchor="middle" fill="#555">automated reasoning rejects a typo and an allow-all</text>
+  <text x="520" y="263" font-size="11" text-anchor="middle" fill="#555">LOG_ONLY → ENFORCE · 5-case decision matrix</text>
+  <text x="520" y="279" font-size="11" text-anchor="middle" fill="#555">same 16 runs: bind refused, Lambda never runs</text>
+  <!-- col 3 -->
+  <rect x="740" y="55" width="200" height="255" rx="10" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="755" y="80" font-size="14" font-weight="bold" fill="#1d8102">§4–§5 Remember, operate</text>
+  <rect x="755" y="95" width="170" height="44" rx="6" fill="#fff" stroke="#1d8102"/><text x="840" y="114" font-size="13" text-anchor="middle">AgentCore Memory</text><text x="840" y="130" font-size="11" text-anchor="middle" fill="#555">events → extracted records</text>
+  <rect x="755" y="155" width="170" height="44" rx="6" fill="#fff" stroke="#1d8102"/><text x="840" y="174" font-size="13" text-anchor="middle">Strands memory hook</text><text x="840" y="190" font-size="11" text-anchor="middle" fill="#555">Thursday, one sentence</text>
+  <rect x="755" y="215" width="170" height="44" rx="6" fill="#fff" stroke="#1d8102"/><text x="840" y="234" font-size="13" text-anchor="middle">Trace + decisions</text><text x="840" y="250" font-size="11" text-anchor="middle" fill="#555">spans · CloudWatch metrics</text>
+  <line x1="840" y1="139" x2="840" y2="155" stroke="#232f3e" marker-end="url(#a)"/><line x1="840" y1="199" x2="840" y2="215" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="300" y1="182" x2="340" y2="182" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="700" y1="182" x2="740" y2="182" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+</svg>

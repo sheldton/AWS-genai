@@ -24,6 +24,16 @@
 # > **Resources:** S3 bucket `mlaidp2-m09-<run id>` (datasets + job output), IAM role `mlaidp2-m09-eval-role`, two
 # > evaluation jobs `mlaidp2-m09-<run id>-support-v1` / `-v2`. §0 Prep creates them in about 30 s; the jobs then need
 # > **10–30 minutes** — run §0 at least 35 minutes before class. The cleanup section deletes everything.
+#
+# ![M09 at a glance: unit tests and contracts (§1), a calibrated judge (§2) without position or verbosity bias (§3), a release gate with error bars (§4), Bedrock Evaluations (§5)](../assets/diagrams/m09_overview.svg)
+#
+# **How to read this notebook**
+# | Marker | Meaning |
+# |---|---|
+# | 💡 **Concept** | the idea behind the next cells, in a few lines |
+# | 🔑 **Key code** | the lines worth reading closely; in the code they are marked `# ▶ KEY` |
+# | 📊 **How to read this** | what the output means and what to look for |
+# | ✅ **Takeaway** | the one thing to remember from a section |
 
 # %% [markdown]
 # ## §0 Setup
@@ -57,7 +67,7 @@ def converse_text(model_id: str, prompt: str, *, system: str | None = None, max_
     if system:
         req["system"] = [{"text": system}]
     r = brt.converse(**req)
-    SPEND[section] += m.usd(model_id, r["usage"])
+    SPEND[section] += m.usd(model_id, r["usage"])                   # ▶ KEY: every call is costed from its usage block
     return m.text_of(r), r["usage"]
 
 def pmap(fn, items, workers: int = 4) -> list:
@@ -123,6 +133,18 @@ print(f"{len(GOLDEN)} golden questions · prompt v1 {len(PROMPTS['v1'])} chars �
 # ourselves (temperature 0), write them as JSONL, and the job only *judges* them — the same configuration for both versions
 # makes the reports comparable (slide 20). First the bucket and a least-privilege service role: the trust policy is pinned
 # to our account and to evaluation jobs (confused-deputy protection); the permissions name one bucket and one judge model.
+#
+# > 💡 **Concept — Amazon Bedrock Evaluations, model-as-a-judge.** `CreateEvaluationJob` runs an asynchronous job
+# > that reads a **JSONL dataset from S3**, has an **evaluator model** score every record on the metrics you choose, and
+# > writes per-record scores plus an explanation back to S3. With **bring your own inference responses**
+# > (`precomputedInferenceSource`) each record already contains the answer (`modelResponses`), so the job does not call
+# > the model under test at all — it only judges. That is what lets you evaluate any system (a RAG pipeline, an agent, a
+# > model outside Bedrock) and compare two versions with exactly the same judge. The job runs as an IAM **service
+# > role** that Bedrock assumes: it reads the dataset, invokes the evaluator model and writes the results.
+#
+# > 🔑 **Key code** — the trust policy's `aws:SourceArn` pattern `evaluation-job/*` (only evaluation jobs of this
+# > account may assume the role); the permission policy lists one bucket and the Nova Pro model / inference profile;
+# > `put_bucket_cors` is only for the console wizard, which reads the dataset from the browser.
 
 # %%
 JUDGE_PROFILE = m.NOVA_PRO          # a judge model that Bedrock Evaluations supports; the job paces its own calls
@@ -145,7 +167,9 @@ ensure_bucket()
 def ensure_role() -> str:
     trust = {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"Service": "bedrock.amazonaws.com"},
              "Action": "sts:AssumeRole", "Condition": {"StringEquals": {"aws:SourceAccount": ACCOUNT},
+             # ▶ KEY: only evaluation jobs of this account may assume the role (confused deputy)
              "ArnLike": {"aws:SourceArn": f"arn:aws:bedrock:{m.REGION}:{ACCOUNT}:evaluation-job/*"}}}]}
+    # ▶ KEY: least privilege - one bucket, one judge model
     policy = {"Version": "2012-10-17", "Statement": [
         {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:ListBucket", "s3:GetBucketLocation"],
          "Resource": [f"arn:aws:s3:::{BUCKET}", f"arn:aws:s3:::{BUCKET}/m09/*"]},
@@ -169,6 +193,17 @@ ROLE_ARN = ensure_role()
 # The job definition. Built-in metrics ship with judge prompts AWS has tested; the **custom metric** brings our own rubric and
 # rating scale (slide 38: instructions, a scale with a definition per value, template variables `{{prompt}}` and
 # `{{prediction}}`). The job is **adopted** if one with this name is running or finished; a failed one is replaced.
+#
+# > 💡 **Concept — built-in vs custom metrics.** Built-in metrics (`Builtin.Correctness`, `Builtin.Completeness`,
+# > `Builtin.Helpfulness`, `Builtin.ProfessionalStyleAndTone`, …) come with judge prompts AWS wrote and tested. A
+# > **custom metric** is your own rubric: `instructions` with template variables the service fills in per record
+# > (`{{prompt}}` = the question, `{{prediction}}` = the answer under test) and a `ratingScale` where every value has a
+# > definition. The service normalises every score to 0–1 in the report, whatever scale you used.
+#
+# > 🔑 **Key code** — in `job_request`: `metricNames` lists built-ins **and** the custom metric's name;
+# > `customMetricConfig.customMetrics[].customMetricDefinition` carries `instructions` + `ratingScale`;
+# > `inferenceConfig.models[].precomputedInferenceSource.inferenceSourceIdentifier` must equal the `modelIdentifier`
+# > written into the dataset records (`support-v1` / `support-v2`).
 
 # %%
 EMPATHY = ("You are evaluating an answer from an insurance customer support assistant.\nCustomer message: {{prompt}}\n"
@@ -186,11 +221,13 @@ def job_request(label: str, name: str, dataset_uri: str) -> dict:
             "datasetMetricConfigs": [{"taskType": "General", "metricNames": METRICS,
                                       "dataset": {"name": f"golden-{label}", "datasetLocation": {"s3Uri": dataset_uri}}}],
             "evaluatorModelConfig": evaluator,
+            # ▶ KEY: our own rubric as a metric - instructions with {{prompt}}/{{prediction}} and a defined scale
             "customMetricConfig": {"evaluatorModelConfig": evaluator, "customMetrics": [{"customMetricDefinition": {
                 "name": "Empathy", "instructions": EMPATHY,
                 "ratingScale": [{"definition": "Poor", "value": {"floatValue": 0}},
                                 {"definition": "Good", "value": {"floatValue": 1}},
                                 {"definition": "Excellent", "value": {"floatValue": 2}}]}}]}}},
+        # ▶ KEY: bring your own responses - the job only judges, it never calls the model under test
         inferenceConfig={"models": [{"precomputedInferenceSource": {"inferenceSourceIdentifier": f"support-{label}"}}]},
         outputDataConfig={"s3Uri": f"s3://{BUCKET}/m09/results/"},
         jobTags=[{"key": k, "value": v} for k, v in m.TAGS.items()])
@@ -200,6 +237,16 @@ custom = cfg["evaluationConfig"]["automated"]["customMetricConfig"]["customMetri
 print(json.dumps({"metricNames": METRICS, "evaluator": JUDGE_PROFILE, "inferenceConfig": cfg["inferenceConfig"],
                   "customMetric": {"name": custom["name"], "ratingScale": {r["definition"]: r["value"]["floatValue"]
                                                                            for r in custom["ratingScale"]}}}, indent=1))
+
+# %% [markdown]
+# Adopt or start the two jobs. A dataset record is one JSON line: `prompt`, `referenceResponse`, and `modelResponses`
+# with the answer and the source name.
+#
+# > 🔑 **Key code** — `find_job` pages through `list_evaluation_jobs` and adopts a running or finished job (names must
+# > be unique, so a failed job is replaced by `name-rNNNNN`); `write_dataset` writes the JSONL; `create_evaluation_job`
+# > is wrapped in `m.retry` because a role created seconds ago is not yet assumable by the service.
+#
+# > ⏱️ On the first run this cell prints nothing for ≈ 15–25 s (40 answers generated for the datasets); adopting is instant.
 
 # %%
 def find_job(name: str) -> dict | None:
@@ -212,6 +259,7 @@ def find_job(name: str) -> dict | None:
 def write_dataset(label: str) -> str:
     """BYO responses: one JSONL record per golden question - prompt, reference, the response and who produced it."""
     answers = pmap(lambda g: converse_text(GENERATOR, g[0], system=PROMPTS[label], section="§0")[0], GOLDEN)
+    # ▶ KEY: the BYO-response record format - modelIdentifier must match inferenceSourceIdentifier
     rows = [{"prompt": q, "referenceResponse": ref,
              "modelResponses": [{"response": a, "modelIdentifier": f"support-{label}"}]} for (q, ref), a in zip(GOLDEN, answers)]
     key = f"m09/datasets/support-{label}.jsonl"
@@ -225,6 +273,7 @@ for label, name in JOBS.items():
         continue
     stale = any(j["jobName"] == name for j in bedrock.list_evaluation_jobs(nameContains=name)["jobSummaries"])
     req = job_request(label, f"{name}-r{int(time.time()) % 100000}" if stale else name, write_dataset(label))
+    # ▶ KEY: start the asynchronous job; retried while the new role propagates
     arn = m.retry(lambda: bedrock.create_evaluation_job(**req)["jobArn"], when="AccessDenied|role|assume", tries=10, delay=6)
     print(f"started {req['jobName']} (about 10-30 min)")
 
@@ -233,6 +282,16 @@ for label, name in JOBS.items():
 # The bottom of the testing pyramid you'll see next (slide 39): the code around the model is ordinary code. The request
 # builder, the judge-output parser and the **output contract** (numbers from the reference must appear, length budget, no promises) are
 # deterministic — plain unit tests, run on every commit, in milliseconds, for $0.
+#
+# > 💡 **Concept — an oracle.** A test needs an *oracle*: something that decides pass/fail. For the code around the
+# > model the oracle is exact (`parse_verdict('{"score": 7}')` must be `None`). For model output a **partial oracle**
+# > still works where the answer has a checkable part — every amount and deadline in the reference must appear in the
+# > answer. Where there is nothing checkable ("Is a burst pipe covered?"), only a reader — a human or a judge model —
+# > can decide. Knowing how much of your golden set each oracle reaches tells you where the judge is unavoidable.
+#
+# > 🔑 **Key code** — `parse_verdict` **fails closed**: anything that is not an integer score 1–5 becomes `None`
+# > (later counted as FAIL), never a guess from prose. `contract` returns three booleans: the reference's numbers ⊆ the
+# > answer's numbers (after removing thousands separators), a word budget, and no promise words.
 
 # %%
 NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
@@ -249,12 +308,14 @@ def parse_verdict(text: str) -> int | None:
     s = j.get("score") if isinstance(j, dict) else None
     if isinstance(s, str) and re.fullmatch(r"\s*\d\s*", s):      # Nova Lite sometimes sends "score": "2"
         s = int(s)
+    # ▶ KEY: fail closed - only an integer 1..5 is a score; everything else is None
     return int(s) if isinstance(s, (int, float)) and 1 <= s <= 5 and float(s).is_integer() else None
 
 def numbers(text: str) -> set[str]:
     return {n.replace(",", "").rstrip(".") for n in NUMBER.findall(text)}
 
 def contract(answer: str, reference: str, max_words: int = 60) -> dict[str, bool]:
+    # ▶ KEY: a partial oracle - the reference's numbers must be a subset of the answer's numbers
     return {"numbers": numbers(reference) <= numbers(answer),             # every amount/deadline of the reference
             "length": len(answer.split()) <= max_words,
             "no promises": not re.search(r"\bguarantee|\bdefinitely covered|100 ?%", answer, re.I)}
@@ -298,6 +359,10 @@ def run_tests() -> list[dict]:
 m.table(run_tests(), fmt={"ms": "{:.2f}"})
 
 # %% [markdown]
+# > 📊 **How to read this** — one row per unit test: its name says what it pins down, **result** must be ✓ for all of
+# > them, **ms** shows the cost (fractions of a millisecond — these can run on every commit). The last test passes
+# > *because* the contract fails to read "two weeks" as 14 days: it documents a known limit of the oracle.
+#
 # Now the same contract against **live model output** (v1, temperature 0). The number check is a real oracle — but only
 # for the questions whose reference contains a number. Count how much of the golden set it can reach.
 
@@ -315,6 +380,11 @@ print(f"deterministic oracle reaches {reach}/{len(GOLDEN)} questions; v1 passes 
 print(f"the other {len(GOLDEN) - reach} ('Is a burst pipe covered?') need a judge that understands the answer")
 
 # %% [markdown]
+# > 📊 **How to read this** — one row per golden question. **oracle** says whether a deterministic check exists
+# > (`numbers`) or not (`– needs a judge –`). For the `numbers` rows, a ✗ in the **numbers** column is a real finding:
+# > a limit or deadline from the reference is missing in the answer — read the answer to see which. ✓ in the
+# > *needs a judge* rows means only "no number was required", not "correct". **length** and **no promises** apply to all.
+#
 # > **Think about it:** If an answer passes every contract check, does that mean it is right? Name one wrong answer
 # > that would pass every check in this table.
 #
@@ -323,12 +393,21 @@ print(f"the other {len(GOLDEN) - reach} ('Is a burst pipe covered?') need a judg
 # - Which of these tests would catch a model upgrade that starts writing "USD 1.000" (European format)?
 # - Where in your pipeline do contract tests run — CI, canary, or production (or all three)?
 # </details>
+#
+# > ✅ **Takeaway §1** — Unit-test everything around the model, make parsers fail closed, and use output contracts as a
+# > partial oracle — then count how much of the golden set they cannot reach: that part needs a judge.
 
 # %% [markdown]
 # ## 2 · Who judges the judge? Calibration against human labels
 # Slide 38: score a calibration set with humans **and** the judge, measure agreement with **Cohen's kappa**, read the
 # disagreements. Our set has 38 answers with a human PASS/FAIL label: right and short, right but padded with friendly
 # filler, long and confidently wrong, short and subtly wrong (a missing condition), and borderline cases.
+#
+# > 💡 **Concept — calibrating a judge.** An LLM judge is a measuring instrument, and an instrument is calibrated
+# > against a reference: here, answers a human has already labelled PASS or FAIL. The calibration set is built to be
+# > *hard* for a judge — fluent wrong answers, correct answers padded with filler, answers missing one condition —
+# > because those are the cases where judges and humans part ways. The set is kept and re-run whenever the judge
+# > prompt or the judge model changes: it is the judge's own regression test.
 
 # %%
 FILLER = (" We completely understand how stressful damage to your home can be, and we're here for you every step of"
@@ -388,6 +467,15 @@ print(Counter(c["kind"] for c in CALIBRATION), Counter(c["human"] for c in CALIB
 # %% [markdown]
 # Two judge prompts. **Naive** is what most teams start with. **Hardened** applies slide 38: measurable criteria, a reference
 # answer, an anchored scale, "length is not quality", reasoning before the score, JSON out.
+#
+# > 🔑 **Key code**
+# > - `HARDENED` — the reference answer is in the prompt (the judge compares instead of guessing), every scale value
+# >   has a definition, an explicit cap ("caps the score at 2") for contradictions and missing conditions, and
+# >   "Length is not quality".
+# > - `judge(...)` — temperature 0 (set in `converse_text`) and `parse_verdict`, so an unreadable verdict becomes `None`.
+# > - `ARMS` — 2 judges × 2 rubrics, every arm scores the **same** 38 answers (a paired comparison).
+#
+# > ⏱️ The judge cell prints nothing for ≈ 20–25 s (152 judge calls, 4 in parallel).
 
 # %%
 NAIVE = """Rate the quality of this answer from a customer support assistant on a scale of 1 to 5.
@@ -397,6 +485,7 @@ Answer: {a}
 
 Return only JSON: {{"score": <1-5>}}"""
 
+# ▶ KEY: reference answer + anchored scale + a cap for contradictions + "length is not quality"
 HARDENED = """You grade answers from an insurance support assistant against a reference answer.
 Criteria: correctness and completeness against the reference ONLY. Length is not quality: friendly filler and extra detail
 earn nothing. A statement that contradicts the reference, or a missing condition that changes the outcome for the
@@ -416,7 +505,7 @@ def judge(judge_id: str, rubric: str, q: str, ref: str, answer: str, section: st
     j = m.parse_json(text)
     return {"score": parse_verdict(text), "why": j.get("reasoning", "") if isinstance(j, dict) else ""}
 
-ARMS = [(j, r) for j in JUDGES for r in ("naive", "hardened")]
+ARMS = [(j, r) for j in JUDGES for r in ("naive", "hardened")]      # ▶ KEY: every arm judges the same 38 answers
 t0 = time.time()
 VERDICTS = pmap(lambda x: judge(x[0][0], x[0][1], x[1]["q"], x[1]["ref"], x[1]["answer"]),
                 [(arm, c) for arm in ARMS for c in CALIBRATION])
@@ -428,16 +517,31 @@ print(f"{len(VERDICTS)} judge calls in {time.time() - t0:.0f} s · "
 # everything agrees as often as the humans said PASS — the next cell prints that baseline). With 38 items the kappa
 # itself is uncertain — a **bootstrap over items** gives its 95 % interval.
 # Slide 38's bar: κ > 0.6 substantial, κ > 0.8 near-perfect.
+#
+# ![Cohen's kappa: observed agreement corrected for the agreement expected by chance](../assets/diagrams/m09_kappa.svg)
+#
+# > 💡 **Concept — Cohen's kappa.** κ = (p_o − p_e) / (1 − p_e). **p_o** is the observed agreement (share of items
+# > where judge and human give the same label). **p_e** is the agreement two raters would reach *by chance* given how
+# > often each says PASS: P(both PASS) + P(both FAIL). A judge that answers PASS to everything agrees with humans as
+# > often as humans said PASS — high p_o, but p_o = p_e, so κ = 0. κ = 1 is perfect agreement, κ < 0 worse than chance.
+# > With only 38 items one or two flipped labels move κ a lot, so it gets a **bootstrap interval**: resample the 38
+# > items with replacement 2,000 times, recompute κ each time, keep the middle 95 %.
+#
+# > 🔑 **Key code** — `kappa`: `po` and `pe` exactly as in the formula; `bootstrap`: resamples **item indices** and
+# > applies the same statistic to each resample; `label`: score ≥ 4 = PASS, and an unparseable verdict (`None`) counts
+# > as FAIL (fail closed).
 
 # %%
 def kappa(a: list[str], b: list[str]) -> float:
     n = len(a); po = sum(x == y for x, y in zip(a, b)) / n
+    # ▶ KEY: chance agreement from each rater's own PASS/FAIL rates
     pe = sum((a.count(c) / n) * (b.count(c) / n) for c in set(a) | set(b))
     return 1.0 if pe == 1 else (po - pe) / (1 - pe)
 
 def bootstrap(stat, n_items: int, reps: int = 2000, seed: int = 9) -> tuple[float, float]:
     """95 % percentile interval of stat(indices) over resampled item indices."""
     rnd = random.Random(seed)
+    # ▶ KEY: resample items with replacement, recompute the statistic, keep the middle 95 %
     vals = sorted(stat([rnd.randrange(n_items) for _ in range(n_items)]) for _ in range(reps))
     return vals[int(0.025 * reps)], vals[int(0.975 * reps) - 1]
 
@@ -462,6 +566,12 @@ print(f"{'✓' if best['kappa'] > 0.6 else '✗'} best: {best['judge']} / {best[
       f"({'above' if best['kappa'] > 0.6 else 'below'} the 0.6 bar)")
 
 # %% [markdown]
+# > 📊 **How to read this** — one row per judge × rubric. Read **kappa** together with its **95% CI**, not **agree**:
+# > raw agreement looks respectable even for a judge that adds nothing (compare it with the chance baseline printed
+# > above). A CI that contains 0 means the judge's agreement with humans is statistically indistinguishable from chance;
+# > a lower bound above 0.6 clears slide 38's bar with room to spare. **unparsed** should be 0 (otherwise the parser or
+# > the output format needs work). The five right-hand columns are the **mean score per answer kind** — read them next.
+#
 # The mean score per answer kind (columns on the right) is where **verbosity bias** shows: compare *padded, right*
 # with *short, right* (same facts), and *long, wrong* with anything. Now read the disagreements of the hardened judges —
 # slide 38 says they point at the part of the rubric that is ambiguous.
@@ -476,6 +586,12 @@ for k, (j, rubric) in enumerate(ARMS):
             dis.append({"judge": m.model_name(j), "answer": c["answer"][:80], "reference": c["ref"][:45],
                         "human": c["human"], "judge score": v["score"], "judge's reasoning": v["why"][:80]})
 m.table(dis) if dis else print("no disagreements on this run")
+
+# %% [markdown]
+# > 📊 **How to read this** — every row is an item where a hardened judge and the human label disagree. Read the
+# > **judge's reasoning** against the **reference**: is the judge wrong, or is the human label debatable? Disagreements
+# > that cluster on one question type (an extra correct fact, a vague "two weeks") point at the rubric sentence to
+# > change next. Few rows is the goal; no rows on 38 items does not prove the judge is perfect.
 
 # %%
 import matplotlib.pyplot as plt
@@ -493,6 +609,12 @@ ax.set_title(f"Long, wrong answers: the naive judge gives them {wrong['naive']:.
 plt.tight_layout(); plt.show()
 
 # %% [markdown]
+# > 📊 **How to read this** — one group of four bars per answer kind; grey = naive rubric, blue = hardened, darker =
+# > Mistral Large 3, lighter = Nova Lite. The dotted line at 4 is the PASS cut-off. A good judge puts *short, right*
+# > and *padded, right* **above** the line and *long, wrong* and *short, subtly wrong* **below** it. Bars of a wrong
+# > kind above the line are answers the judge would wave through; *padded* scoring higher than *short* (same facts)
+# > is verbosity bias.
+#
 # > **Think about it:** Look at the *long, wrong* column: if the naive judge passes most of the wrong answers, which
 # > sentence of the hardened prompt do you think did the most work — and how would you *test* that claim?
 #
@@ -502,6 +624,10 @@ plt.tight_layout(); plt.show()
 # - The cheap judge *is* the generator's model. Which bias from slide 37 does that invite, and how would you measure it?
 # - How many calibration items would you need to tell κ = 0.8 from κ = 0.9?
 # </details>
+#
+# > ✅ **Takeaway §2** — Treat a judge like an instrument: calibrate it on human-labelled hard cases, report κ with an
+# > interval, and read the disagreements. A rubric with a reference answer and an anchored scale is what turns a
+# > chance-level judge into a useful one.
 
 # %% [markdown]
 # ## 3 · Position bias and verbosity bias in pairwise judging
@@ -510,6 +636,20 @@ plt.tight_layout(); plt.show()
 # - **Position:** two *equally good* answers (our wording vs the reference wording). An unbiased judge's verdict follows
 #   the answer when the order is swapped — or says TIE. A verdict that stays on the same *slot* is position-driven.
 # - **Verbosity:** the same correct answer, plain vs padded with filler. Facts are identical, so the right verdict is TIE.
+#
+# ![Judging each pair in both orders: a verdict that follows the answer, one that follows the slot, and a tie](../assets/diagrams/m09_swap.svg)
+#
+# > 💡 **Concept — position and verbosity bias.** LLM judges are known to prefer the answer in a particular *slot*
+# > (often the first) and the *longer* answer, independent of content. Both biases are measurable without any human
+# > labels: show the same pair twice with A and B swapped. A verdict that names the same **answer** both times is
+# > consistent; one that names the same **slot** both times (A, then A again) was decided by position. If the two
+# > answers carry the same facts, any consistent winner other than TIE is a bias — for padded vs plain, verbosity.
+#
+# > 🔑 **Key code** — `pairwise` runs the two orders `(x, y)` and `(y, x)` and maps each "A"/"B" back to the
+# > **answer** (`"x"`/`"y"`) via `a is x`; a pair is consistent only if both runs name the same answer. `PAIR_HARDENED`
+# > allows `"TIE"` and says "Ignore the order"; `PAIR_NAIVE` forces a winner.
+#
+# > ⏱️ The pairwise cell prints nothing for ≈ 25–30 s (192 judge calls, 4 in parallel).
 
 # %%
 PAIR_NAIVE = """Which answer from a customer support assistant is better?
@@ -534,9 +674,10 @@ Think first. Return only JSON: {{"reasoning": "<max 15 words>", "winner": "A" | 
 def pairwise(judge_id: str, prompt: str, q: str, ref: str, x: str, y: str) -> tuple[str, str]:
     """Judge (x, y) in both orders. Returns the winner in each order, mapped back to 'x' / 'y' / 'tie'."""
     out = []
-    for a, b in ((x, y), (y, x)):
+    for a, b in ((x, y), (y, x)):                                     # ▶ KEY: the same pair, both orders
         text, _ = converse_text(judge_id, prompt.format(q=q, ref=ref, a=a, b=b), max_tokens=100, section="§3")
         w = str((m.parse_json(text) or {}).get("winner", "?")).upper()
+        # ▶ KEY: map the slot ("A"/"B") back to the answer ("x"/"y") - a consistent judge names the same answer twice
         out.append("tie" if w == "TIE" else ("x" if (w == "A") == (a is x) else "y") if w in ("A", "B") else "?")
     return out[0], out[1]
 
@@ -569,6 +710,11 @@ m.table(rows)
 # only if it survives the swap** (the "both orders" columns already do). The naive prompt forces a winner, so between two
 # equal answers it *must* pick by something irrelevant. Between plain and padded: does it pick the longer one?
 #
+# > 📊 **How to read this** — four rows: two judges × two prompts, 12 pairs per experiment. Ideal values: **verdict
+# > changes with order** 0/12, **slot-1 wins (both runs)** 0, **padded wins both orders** 0/12, **tie both orders**
+# > 12/12. A high *changes with order* count is position bias (the verdict follows the slot); a high *padded wins both
+# > orders* count is verbosity bias that survives the swap — the swap alone does not remove it, only the prompt does.
+#
 # > **Think about it:** Your A/B dashboard says the new prompt "wins 70 % of pairwise comparisons". Which two questions
 # > from this section do you ask before you believe it?
 #
@@ -577,6 +723,9 @@ m.table(rows)
 # - Why is allowing TIE a mitigation and not just a convenience?
 # - How would you detect *self-preference* (a judge favouring its own model family) with this same harness?
 # </details>
+#
+# > ✅ **Takeaway §3** — Never trust a single pairwise verdict: judge both orders, count only wins that survive the
+# > swap, allow a tie, and tell the judge that length is not quality — then measure that the biases are gone.
 
 # %% [markdown]
 # ## 4 · A release gate for prompt v2 — with error bars
@@ -585,8 +734,27 @@ m.table(rows)
 # must not look like a system change, slide 20).
 # Statistics: the two samples of a question are not independent, so the bootstrap resamples **questions** (a cluster
 # bootstrap), not answers — resampling answers would make the interval look narrower than it is.
+#
+# ![The release gate: per-question differences, a cluster bootstrap, and a confidence interval against the non-inferiority margin](../assets/diagrams/m09_gate.svg)
+#
+# > 💡 **Concept — non-inferiority, not "is it better?".** A prompt change that is meant to change *tone* should not
+# > make answers *worse*; it does not have to make them better. So the rule is: the lower end of the 95 % CI of
+# > mean(v2 − v1) must stay above a **margin** (−0.5 judge points) you decided before the test. Point estimates are not
+# > enough — with 20 questions a difference of a tenth of a point is noise. Rules on contracts and cost sit next to it,
+# > because a gate that only looks at correctness ships everything it does not measure.
+#
+# > 💡 **Concept — cluster bootstrap.** The two samples of the same question share the question's difficulty, so they
+# > are not independent. Average them per question first, then resample the **20 questions** with replacement 5,000
+# > times and recompute the mean difference. The 2.5th and 97.5th percentiles of those 5,000 means are the 95 % CI.
+#
+# > 🔑 **Key code** — `GATE` is printed **before** any answer is generated; `temperature=0.7` with `SAMPLES = 2`
+# > exposes run-to-run noise; `GATE_JUDGE` is picked from §2's kappa table (the calibrated judge, pinned);
+# > `"score": s or 1` — an unparseable verdict counts as the worst score (fail closed).
+#
+# > ⏱️ The next cell prints nothing for ≈ 30 s (80 answers + 80 judge calls).
 
 # %%
+# ▶ KEY: the rules are data, written and printed before the test runs
 GATE = {"correctness": ("lower bound of the 95 % CI of mean(v2 − v1) judge score", "> -0.5 (non-inferiority margin)"),
         "contracts":   ("share of v2 answers passing every contract check", ">= v1 share - 5 points"),
         "cost":        ("v2 output tokens per answer", "<= 1.5 x v1")}
@@ -596,6 +764,7 @@ SAMPLES = 2
 work = [(v, qi, s) for v in ("v1", "v2") for qi in range(len(GOLDEN)) for s in range(SAMPLES)]
 t0 = time.time()
 gen = pmap(lambda w: converse_text(GENERATOR, GOLDEN[w[1]][0], system=PROMPTS[w[0]], temperature=0.7, section="§4"), work)
+# ▶ KEY: the judge with the best calibrated kappa, pinned for the whole gate
 GATE_JUDGE = next(j for j in JUDGES if m.model_name(j) == max((r for r in CALIB_ROWS if r["rubric"] == "hardened"),
                                                               key=lambda r: r["kappa"])["judge"])
 scores = pmap(lambda x: judge(GATE_JUDGE, "hardened", *GOLDEN[x[0][1]], x[1][0], section="§4")["score"],
@@ -609,18 +778,31 @@ for qi in (0, 7):
         r = next(r for r in RUNS if r["v"] == v and r["qi"] == qi)
         print(f"{v} [{r['score']}] {r['text'][:150]}")
 
+# %% [markdown]
+# > 📊 **How to read this** — the first table restates the rules (they were fixed before any answer existed). The
+# > printed lines show two questions, v1 and v2 side by side, with the judge's score in brackets: compare the
+# > *content* (same facts?) and the *length* and opening of the v2 answers — that is what the contract and cost rules
+# > will measure next.
+#
+# > 🔑 **Key code** — `per_question` averages the two samples of each question (the cluster); `diffs` is one paired
+# > difference per question; `BOOT` resamples those 20 differences 5,000 times; `BOOT[124]` and `BOOT[4874]` are the
+# > 2.5th and 97.5th percentiles; each `checks` entry compares a measurement with its rule from `GATE`.
+
 # %%
 def per_question(v: str, key: str) -> list[float]:
+    # ▶ KEY: one value per question - the two samples of a question form a cluster
     return [statistics.mean(r[key] for r in RUNS if r["v"] == v and r["qi"] == qi) for qi in range(len(GOLDEN))]
 
 s1, s2 = per_question("v1", "score"), per_question("v2", "score")
 diffs = [b - a for a, b in zip(s1, s2)]
 rnd = random.Random(11)
+# ▶ KEY: cluster bootstrap - resample the 20 questions, not the 40 answers
 BOOT = sorted(statistics.mean(diffs[rnd.randrange(len(diffs))] for _ in diffs) for _ in range(5000))
 lo, hi = BOOT[124], BOOT[4874]
 c1 = statistics.mean(r["contract_ok"] for r in RUNS if r["v"] == "v1")
 c2 = statistics.mean(r["contract_ok"] for r in RUNS if r["v"] == "v2")
 t1, t2 = statistics.mean(per_question("v1", "out_tokens")), statistics.mean(per_question("v2", "out_tokens"))
+# ▶ KEY: non-inferiority - the CI's LOWER bound must clear the margin, not the point estimate
 checks = [("correctness", f"v1 {statistics.mean(s1):.2f} → v2 {statistics.mean(s2):.2f}; diff {statistics.mean(diffs):+.2f}, "
                           f"95 % CI [{lo:+.2f}, {hi:+.2f}]", lo > -0.5),
           ("contracts", f"v1 {c1:.0%} → v2 {c2:.0%}", c2 >= c1 - 0.05),
@@ -632,6 +814,12 @@ noise = lo < 0 < hi
 naive_gate = "ship" if statistics.mean(s2) >= statistics.mean(s1) else "block"
 print(f"a point-estimate gate ('ship if v2 mean >= v1 mean') would {naive_gate} on a {statistics.mean(diffs):+.2f} "
       "difference" + (" that is inside the noise (the CI contains 0)" if noise else ""))
+
+# %% [markdown]
+# > 📊 **How to read this** — one row per rule: **measured** is the evidence, **result** the rule's verdict; the gate
+# > passes only if every row passes. For correctness read the CI, not the means: its lower bound is compared with −0.5.
+# > For contracts and cost, compare v1 and v2 directly. The last printed line shows what a naive point-estimate gate
+# > would have done — if the CI contains 0, that gate decided on noise.
 
 # %%
 fig, ax = plt.subplots(figsize=(9, 3.2))
@@ -646,6 +834,11 @@ ax.set_title(f"Correctness: CI {'clears' if lo > -0.5 else 'crosses'} the margin
 plt.tight_layout(); plt.show()
 
 # %% [markdown]
+# > 📊 **How to read this** — the histogram is the 5,000 bootstrap means of v2 − v1; the shaded band is the 95 % CI,
+# > the red line the −0.5 margin, the dotted line 0 (no change). The band entirely right of the red line → correctness
+# > is non-inferior. The band straddling 0 → no detectable difference either way. The band's width is the price of
+# > having only 20 questions.
+#
 # > **Think about it:** Suppose the correctness rule passes and the gate still fails on another rule. Who decides
 # > whether to ship anyway — and where is that override recorded (slide 19)?
 #
@@ -654,16 +847,29 @@ plt.tight_layout(); plt.show()
 # - Read the CI's half-width above (20 questions). About how many questions would make it three times narrower?
 # - What changes in this gate if v2 also made answers 40 % cheaper?
 # </details>
+#
+# > ✅ **Takeaway §4** — A release gate is rules written before the run, evaluated with an interval (resampling the
+# > right unit — the question), next to contract and cost rules. A gate that compares two means decides on noise.
 
 # %% [markdown]
 # ## 5 · The managed version — Amazon Bedrock Evaluations
 # The jobs from §0 Prep judged the v1 and v2 answers with Nova Pro on four built-in metrics and our custom **Empathy**
 # metric. `GetEvaluationJob` returns the configuration and the status; the per-record scores land in S3 as JSONL.
+#
+# > 💡 **Concept — what a finished job leaves behind.** Status goes `InProgress` → `Completed` (or `Failed` /
+# > `Stopped`). The report in the console is built from files the job wrote under `outputDataConfig.s3Uri`: one
+# > JSONL line per dataset record with the original `inputRecord` and `automatedEvaluationResult.scores` — per metric a
+# > normalised `result` (0–1) and `evaluatorDetails` with the judge's written explanation — plus the custom metric's
+# > definition as the job used it. Because it is your S3 data, you can run your own statistics on it, as below.
+#
+# > 🔑 **Key code** — `get_evaluation_job(jobIdentifier=…)` for status and timing; the custom metric definition is
+# > read back from `…/custom_metrics/Empathy.json` (the job API does not echo it).
 
 # %%
 STATUS = {}
 for ver, name in JOBS.items():
     j = find_job(name)
+    # ▶ KEY: status, configuration and timing of the managed job
     d = bedrock.get_evaluation_job(jobIdentifier=j["jobArn"]) if j else {}
     STATUS[ver] = d
     if d.get("status") == "Completed":
@@ -680,10 +886,16 @@ if key:
           "· judge", used["evaluatorModelConfig"]["bedrockEvaluatorModels"][0]["modelIdentifier"])
 print(f"console: https://{m.REGION}.console.aws.amazon.com/bedrock/home?region={m.REGION}#/eval/model-evaluation")
 
+# %% [markdown]
+# > 🔑 **Key code** — `job_records` finds the job's JSONL files by the **job id** (the last part of the ARN) in the
+# > output prefix and parses every line; `scores_by_metric` pivots them to *metric → {prompt: score}*, skipping scores
+# > without a `result` (a judge call that failed for that record).
+
 # %%
 def job_records(d: dict) -> list[dict]:
     """Every output record of a finished job: the job writes JSONL under <output>/<job name>/<job id>/..."""
     job_id = d["jobArn"].rsplit("/", 1)[-1]
+    # ▶ KEY: the job's output files are found by its id under the results prefix
     keys = [o["Key"] for page in s3.get_paginator("list_objects_v2").paginate(Bucket=BUCKET, Prefix="m09/results/")
             for o in page.get("Contents", []) if job_id in o["Key"] and o["Key"].endswith(".jsonl")]
     lines = [ln for k in keys for ln in s3.get_object(Bucket=BUCKET, Key=k)["Body"].read().decode().splitlines()]
@@ -695,7 +907,7 @@ def scores_by_metric(records: list[dict]) -> dict[str, dict[str, float]]:
     for r in records:
         prompt = r["inputRecord"]["prompt"]
         for s in r["automatedEvaluationResult"]["scores"]:
-            if s.get("result") is not None:
+            if s.get("result") is not None:                           # ▶ KEY: a score without a result = judge error, skipped
                 out.setdefault(s["metricName"].replace("Builtin.", ""), {})[prompt] = s["result"]
     return out
 
@@ -710,9 +922,14 @@ else:
 # %% [markdown]
 # The same gate statistics on the managed scores: per metric, v1 vs v2 on the same 20 prompts (paired), with a bootstrap
 # interval of the difference. The service normalises every metric to 0–1 (our custom scale 0/1/2 becomes 0/0.5/1).
+#
+# > 🔑 **Key code** — `paired_ci` is §4's bootstrap again: differences per prompt (paired — same 20 prompts in both
+# > jobs), resampled 5,000 times. The **reading** column turns the interval into words: entirely below 0 → *worse*,
+# > entirely above 0 → *better*, otherwise *no detectable change*.
 
 # %%
 def paired_ci(a: list[float], b: list[float], reps: int = 5000, seed: int = 5) -> tuple[float, float]:
+    # ▶ KEY: paired differences per prompt, then the same percentile bootstrap as in §4
     d, rnd = [y - x for x, y in zip(a, b)], random.Random(seed)
     boot = sorted(statistics.mean(d[rnd.randrange(len(d))] for _ in d) for _ in range(reps))
     return boot[int(0.025 * reps)], boot[int(0.975 * reps) - 1]
@@ -725,6 +942,7 @@ if DONE:
         lo_, hi_ = paired_ci(a, b)
         rows.append({"metric": metric, "n": len(prompts), "v1": statistics.mean(a), "v2": statistics.mean(b),
                      "v2 − v1": statistics.mean(b) - statistics.mean(a), "95% CI": f"[{lo_:+.2f}, {hi_:+.2f}]",
+                     # ▶ KEY: the interval, not the means, decides the reading
                      "reading": "worse" if hi_ < 0 else "better" if lo_ > 0 else "no detectable change"})
     m.table(rows, fmt={"v1": "{:.2f}", "v2": "{:.2f}", "v2 − v1": "{:+.2f}"})
     worse = [r["metric"] for r in rows if r["reading"] == "worse"]
@@ -732,6 +950,11 @@ if DONE:
           f"metrics that got significantly worse: {', '.join(worse) or 'none'}")
 
 # %% [markdown]
+# > 📊 **How to read this** — one row per metric (4 built-in + Empathy), **n** prompts scored in both jobs, the means
+# > of v1 and v2 on the 0–1 scale, their difference and its CI, and the **reading**. Look for the metric the change
+# > was *about* (here the tone, i.e. Empathy) and for metrics that move the *wrong* way. A metric that moves in a
+# > direction you did not expect is a question about what that metric's judge prompt rewards.
+#
 # Open the records the judge failed. Every score comes with the judge's explanation — the audit trail slide 38 asks for.
 # Compare the built-in metrics **on the same answer**.
 
@@ -758,6 +981,19 @@ print("model spend of this notebook run: " + ", ".join(f"{k} ${v:.4f}" for k, v 
 # - If the managed job and §4 reach the same verdict, which one would you run on every pull request, and which nightly?
 # - What would you add to the dataset so the next prompt change cannot fool the job the same way?
 # </details>
+#
+# > ✅ **Takeaway §5** — Bedrock Evaluations gives you tested judge prompts, your own custom rubric and an audit trail
+# > in S3; it does not decide for you — run the same paired statistics on its per-record scores, and choose metrics
+# > that answer *your* release question.
+#
+# ## Summary — what you built
+# | Piece | AWS API / pattern | Production next step |
+# |---|---|---|
+# | Unit tests + output contracts | plain Python tests, fail-closed parser, numbers-subset oracle | run in CI on every commit; contracts also as runtime checks |
+# | Calibrated judge | `Converse` judge, Cohen's kappa + bootstrap CI vs human labels | grow the labelled set; re-calibrate on every judge prompt or model change |
+# | Bias checks | pairwise judging in both orders, TIE allowed | a standing bias test in the judge's own regression suite |
+# | Release gate | cluster bootstrap CI, non-inferiority margin, contract and token rules | a CI/CD stage that blocks the prompt version and records overrides |
+# | Managed evaluation | `CreateEvaluationJob` with BYO responses + custom metric, results in S3 | nightly / release-candidate jobs; reports stored next to the prompt version |
 
 # %% [markdown]
 # ## Cleanup — don't skip this

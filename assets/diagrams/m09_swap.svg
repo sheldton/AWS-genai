@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 360" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="360" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker></defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">Pairwise judging in both orders — map the slot back to the answer</text>
+
+  <!-- the two orders -->
+  <rect x="20" y="50" width="300" height="60" rx="8" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="35" y="72" font-size="12" font-weight="bold" fill="#0073bb">Order 1</text>
+  <text x="35" y="94" font-size="12">Answer A = <tspan font-weight="bold">x</tspan>   ·   Answer B = <tspan font-weight="bold">y</tspan></text>
+  <rect x="340" y="50" width="300" height="60" rx="8" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="355" y="72" font-size="12" font-weight="bold" fill="#0073bb">Order 2 (swapped)</text>
+  <text x="355" y="94" font-size="12">Answer A = <tspan font-weight="bold">y</tspan>   ·   Answer B = <tspan font-weight="bold">x</tspan></text>
+  <text x="660" y="72" font-size="11" fill="#555">x, y = the two answers</text>
+  <text x="660" y="88" font-size="11" fill="#555">(e.g. our wording vs the reference,</text>
+  <text x="660" y="104" font-size="11" fill="#555">or plain vs padded)</text>
+
+  <!-- table header -->
+  <rect x="20" y="130" width="920" height="30" fill="#232f3e"/>
+  <text x="35" y="150" font-size="12" fill="#fff" font-weight="bold">judge says (order 1, order 2)</text>
+  <text x="270" y="150" font-size="12" fill="#fff" font-weight="bold">mapped to answers</text>
+  <text x="450" y="150" font-size="12" fill="#fff" font-weight="bold">what it means</text>
+  <text x="760" y="150" font-size="12" fill="#fff" font-weight="bold">counted as</text>
+
+  <rect x="20" y="160" width="920" height="40" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="35" y="185" font-size="12">A, B</text>
+  <text x="270" y="185" font-size="12">x, x</text>
+  <text x="450" y="185" font-size="12">consistent: the verdict follows the answer</text>
+  <text x="760" y="185" font-size="12" font-weight="bold" fill="#1d8102">x wins</text>
+
+  <rect x="20" y="200" width="920" height="40" fill="#fdecea" stroke="#d13212"/>
+  <text x="35" y="225" font-size="12">A, A</text>
+  <text x="270" y="225" font-size="12">x, y</text>
+  <text x="450" y="225" font-size="12">verdict follows the slot — position bias</text>
+  <text x="760" y="225" font-size="12" font-weight="bold" fill="#d13212">no winner (flip)</text>
+
+  <rect x="20" y="240" width="920" height="40" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="35" y="265" font-size="12">TIE, TIE</text>
+  <text x="270" y="265" font-size="12">tie, tie</text>
+  <text x="450" y="265" font-size="12">same facts recognised — right for equal answers</text>
+  <text x="760" y="265" font-size="12" font-weight="bold" fill="#0073bb">tie</text>
+
+  <rect x="20" y="280" width="920" height="40" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="35" y="305" font-size="12">B, A  (y padded)</text>
+  <text x="270" y="305" font-size="12">y, y</text>
+  <text x="450" y="305" font-size="12">consistent, but picks the longer answer — verbosity bias</text>
+  <text x="760" y="305" font-size="12" font-weight="bold" fill="#c66c00">"padded wins both"</text>
+
+  <text x="20" y="345" font-size="12" fill="#232f3e">The swap removes position bias from the count; it cannot remove verbosity bias — only the prompt can ("length is not quality", allow TIE).</text>
+</svg>

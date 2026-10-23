@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="400" fill="#ffffff"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1d8102"/></marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d13212"/></marker>
+    <marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#c66c00"/></marker>
+  </defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">extract() — the model proposes, the schema decides, the errors go back</text>
+
+  <rect x="20" y="70" width="165" height="62" rx="6" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="102" y="94" font-size="13" text-anchor="middle" font-weight="bold">messages</text>
+  <text x="102" y="111" font-size="11" text-anchor="middle" fill="#555">source content (text or</text>
+  <text x="102" y="124" font-size="11" text-anchor="middle" fill="#555">image) + instructions</text>
+
+  <rect x="220" y="70" width="200" height="62" rx="6" fill="#232f3e"/>
+  <text x="320" y="92" font-size="13" text-anchor="middle" fill="#fff" font-weight="bold">bedrock.converse()</text>
+  <text x="320" y="109" font-size="11" text-anchor="middle" fill="#fff">tools: [record_claim]</text>
+  <text x="320" y="123" font-size="11" text-anchor="middle" fill="#fff">toolChoice: {tool: record_claim}</text>
+
+  <rect x="455" y="70" width="150" height="62" rx="6" fill="#fff" stroke="#232f3e"/>
+  <text x="530" y="94" font-size="13" text-anchor="middle" font-weight="bold">toolUse.input</text>
+  <text x="530" y="112" font-size="11" text-anchor="middle" fill="#555">a dict, not free text</text>
+
+  <polygon points="720,61 790,101 720,141 650,101" fill="#fff" stroke="#232f3e"/>
+  <text x="720" y="97" font-size="11" text-anchor="middle">jsonschema</text>
+  <text x="720" y="111" font-size="11" text-anchor="middle">valid?</text>
+
+  <rect x="820" y="70" width="125" height="62" rx="6" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="882" y="94" font-size="13" text-anchor="middle" font-weight="bold" fill="#1d8102">accept</text>
+  <text x="882" y="112" font-size="11" text-anchor="middle" fill="#555">valid: true</text>
+
+  <line x1="185" y1="101" x2="220" y2="101" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="420" y1="101" x2="455" y2="101" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="605" y1="101" x2="650" y2="101" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="790" y1="101" x2="820" y2="101" stroke="#1d8102" marker-end="url(#g)"/>
+  <text x="800" y="93" font-size="10" fill="#1d8102">yes</text>
+
+  <line x1="720" y1="141" x2="720" y2="185" stroke="#d13212" marker-end="url(#r)"/>
+  <text x="728" y="167" font-size="10" fill="#d13212">no: list of violations</text>
+
+  <polygon points="720,185 790,225 720,265 650,225" fill="#fff" stroke="#232f3e"/>
+  <text x="720" y="221" font-size="11" text-anchor="middle">attempts</text>
+  <text x="720" y="235" font-size="11" text-anchor="middle">left?</text>
+
+  <rect x="820" y="194" width="125" height="62" rx="6" fill="#fdecea" stroke="#d13212"/>
+  <text x="882" y="216" font-size="13" text-anchor="middle" font-weight="bold" fill="#d13212">give up</text>
+  <text x="882" y="232" font-size="11" text-anchor="middle" fill="#555">valid: false →</text>
+  <text x="882" y="246" font-size="11" text-anchor="middle" fill="#555">§5 quarantine</text>
+  <line x1="790" y1="225" x2="820" y2="225" stroke="#d13212" marker-end="url(#r)"/>
+  <text x="798" y="217" font-size="10" fill="#d13212">no</text>
+
+  <rect x="220" y="194" width="385" height="62" rx="6" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="412" y="215" font-size="13" text-anchor="middle" font-weight="bold" fill="#c66c00">repair turn</text>
+  <text x="412" y="232" font-size="11" text-anchor="middle" fill="#555">append the model's toolUse message, then a user message with</text>
+  <text x="412" y="246" font-size="11" text-anchor="middle" fill="#555">toolResult {toolUseId, status: "error", text: the violations}</text>
+  <line x1="650" y1="225" x2="605" y2="225" stroke="#c66c00" marker-end="url(#o)"/>
+  <text x="627" y="217" font-size="10" fill="#c66c00">yes</text>
+  <line x1="320" y1="194" x2="320" y2="132" stroke="#c66c00" marker-end="url(#o)"/>
+  <text x="328" y="170" font-size="10" fill="#c66c00">same conversation, next attempt (max 3)</text>
+
+  <!-- lineage strip -->
+  <rect x="20" y="295" width="925" height="85" rx="10" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="35" y="318" font-size="13" font-weight="bold" fill="#0073bb">Every result carries</text>
+  <text x="35" y="340" font-size="12" fill="#333">fields · valid · attempts · repairs (the exact messages sent back) · usage summed over all attempts · $</text>
+  <text x="35" y="362" font-size="12" fill="#333">lineage: schema = claim-v1/&lt;hash of the schema&gt; · model · prompt_sha · at (UTC timestamp)</text>
+</svg>

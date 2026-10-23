@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 360" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="360" fill="#ffffff"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker>
+  </defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">§5 · Tuning a guardrail is a release</text>
+
+  <!-- steps -->
+  <rect x="20" y="60" width="160" height="80" rx="8" fill="#f4f5f7" stroke="#232f3e"/>
+  <text x="100" y="84" font-size="13" text-anchor="middle" font-weight="bold">1 Analyze</text>
+  <text x="100" y="103" font-size="11" text-anchor="middle" fill="#555">benign rows blocked at L3</text>
+  <text x="100" y="118" font-size="11" text-anchor="middle" fill="#555">+ grounding-threshold</text>
+  <text x="100" y="131" font-size="11" text-anchor="middle" fill="#555">sweep on honest answers</text>
+
+  <rect x="205" y="60" width="160" height="80" rx="8" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="285" y="84" font-size="13" text-anchor="middle" font-weight="bold">2 Config diff</text>
+  <text x="285" y="103" font-size="11" text-anchor="middle" fill="#555">SHIELD_V2_CONFIG</text>
+  <text x="285" y="118" font-size="11" text-anchor="middle" fill="#555">reviewed like code:</text>
+  <text x="285" y="131" font-size="11" text-anchor="middle" fill="#555">one change per finding</text>
+
+  <rect x="390" y="60" width="180" height="80" rx="8" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="480" y="84" font-size="13" text-anchor="middle" font-weight="bold">3 ensure_guardrail</text>
+  <text x="480" y="103" font-size="11" text-anchor="middle" fill="#555">UpdateGuardrail (DRAFT)</text>
+  <text x="480" y="118" font-size="11" text-anchor="middle" fill="#555">CreateGuardrailVersion</text>
+  <text x="480" y="131" font-size="11" text-anchor="middle" fill="#555">config hash in description</text>
+
+  <rect x="595" y="60" width="160" height="80" rx="8" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="675" y="84" font-size="13" text-anchor="middle" font-weight="bold">4 Re-run</text>
+  <text x="675" y="103" font-size="11" text-anchor="middle" fill="#555">the WHOLE suite on L3</text>
+  <text x="675" y="118" font-size="11" text-anchor="middle" fill="#555">with version 2 — attacks</text>
+  <text x="675" y="131" font-size="11" text-anchor="middle" fill="#555">and benign questions</text>
+
+  <rect x="780" y="60" width="160" height="80" rx="8" fill="#e8f5e3" stroke="#1d8102" stroke-width="2"/>
+  <text x="860" y="84" font-size="13" text-anchor="middle" font-weight="bold" fill="#1d8102">5 Release gate</text>
+  <text x="860" y="103" font-size="11" text-anchor="middle" fill="#555">no critical attack · ASR</text>
+  <text x="860" y="118" font-size="11" text-anchor="middle" fill="#555">FPR · useful answers</text>
+  <text x="860" y="131" font-size="11" text-anchor="middle" fill="#555">no regression vs pinned</text>
+
+  <line x1="180" y1="100" x2="203" y2="100" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="365" y1="100" x2="388" y2="100" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="570" y1="100" x2="593" y2="100" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="755" y1="100" x2="778" y2="100" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- outcomes -->
+  <rect x="700" y="185" width="115" height="44" rx="6" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="757" y="204" font-size="12" text-anchor="middle" font-weight="bold" fill="#1d8102">PASS</text>
+  <text x="757" y="220" font-size="11" text-anchor="middle" fill="#555">app pins v2</text>
+  <rect x="830" y="185" width="110" height="44" rx="6" fill="#fdecea" stroke="#d13212"/>
+  <text x="885" y="204" font-size="12" text-anchor="middle" font-weight="bold" fill="#d13212">FAIL</text>
+  <text x="885" y="220" font-size="11" text-anchor="middle" fill="#555">keep v1</text>
+  <line x1="840" y1="140" x2="772" y2="183" stroke="#1d8102" marker-end="url(#a)"/>
+  <line x1="875" y1="140" x2="883" y2="183" stroke="#d13212" marker-end="url(#a)"/>
+  <path d="M885,229 L885,255 L100,255 L100,142" fill="none" stroke="#d13212" stroke-dasharray="5,4" marker-end="url(#a)"/>
+  <text x="400" y="249" font-size="11" fill="#d13212">fix, accept and document, or grow the suite — then go round again</text>
+
+  <!-- version model -->
+  <text x="20" y="290" font-size="13" font-weight="bold" fill="#232f3e">The guardrail's versions</text>
+  <rect x="20" y="302" width="190" height="44" rx="6" fill="#fff7ec" stroke="#ff9900" stroke-dasharray="4,3"/>
+  <text x="115" y="321" font-size="12" text-anchor="middle" font-weight="bold">DRAFT (working draft)</text>
+  <text x="115" y="337" font-size="11" text-anchor="middle" fill="#555">mutable — never call it from the app</text>
+  <rect x="270" y="302" width="150" height="44" rx="6" fill="#fff" stroke="#232f3e"/>
+  <text x="345" y="321" font-size="12" text-anchor="middle" font-weight="bold">version 1</text>
+  <text x="345" y="337" font-size="11" text-anchor="middle" fill="#555">immutable snapshot</text>
+  <rect x="440" y="302" width="150" height="44" rx="6" fill="#fff" stroke="#232f3e"/>
+  <text x="515" y="321" font-size="12" text-anchor="middle" font-weight="bold">version 2</text>
+  <text x="515" y="337" font-size="11" text-anchor="middle" fill="#555">immutable snapshot</text>
+  <line x1="210" y1="324" x2="268" y2="324" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="239" y="317" font-size="11" text-anchor="middle" fill="#555">snapshot</text>
+  <text x="610" y="320" font-size="12" fill="#232f3e">The application sends guardrailVersion = a number;</text>
+  <text x="610" y="337" font-size="12" fill="#232f3e">promoting = changing that number, rollback = the old one.</text>
+</svg>

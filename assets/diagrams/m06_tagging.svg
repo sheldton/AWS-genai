@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 430" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="430" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker></defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">What the guardrail reads in one Converse request — untagged vs tagged</text>
+
+  <!-- left: untagged -->
+  <text x="30" y="62" font-size="14" font-weight="bold" fill="#232f3e">Untagged (L2)</text>
+  <rect x="30" y="75" width="410" height="44" rx="6" fill="#f4f5f7" stroke="#999"/>
+  <text x="45" y="95" font-size="12" font-weight="bold">system</text>
+  <text x="45" y="111" font-size="11" fill="#555">rules + canary — guardrails never screen it</text>
+  <rect x="30" y="132" width="410" height="110" rx="6" fill="#fdecea" stroke="#d13212" stroke-width="2"/>
+  <text x="45" y="152" font-size="12" font-weight="bold">user message: one text block</text>
+  <rect x="45" y="162" width="380" height="34" rx="4" fill="#fff" stroke="#d13212"/>
+  <text x="58" y="184" font-size="12">&lt;document&gt; retrieved email / policy text &lt;/document&gt;</text>
+  <rect x="45" y="202" width="380" height="30" rx="4" fill="#fff" stroke="#d13212"/>
+  <text x="58" y="222" font-size="12">Customer: the question</text>
+  <text x="235" y="262" font-size="12" text-anchor="middle" fill="#d13212" font-weight="bold">all of it is screened by the input policies</text>
+  <text x="235" y="280" font-size="11" text-anchor="middle" fill="#555">a benign email saying "ignore my earlier message" trips PROMPT_ATTACK</text>
+
+  <!-- right: tagged -->
+  <text x="500" y="62" font-size="14" font-weight="bold" fill="#232f3e">Tagged with guardContent (L3)</text>
+  <rect x="500" y="75" width="430" height="44" rx="6" fill="#f4f5f7" stroke="#999"/>
+  <text x="515" y="95" font-size="12" font-weight="bold">system</text>
+  <text x="515" y="111" font-size="11" fill="#555">rules + canary — guardrails never screen it</text>
+  <rect x="500" y="132" width="430" height="110" rx="6" fill="#fff" stroke="#232f3e"/>
+  <text x="515" y="152" font-size="12" font-weight="bold">user message: two guardContent blocks</text>
+  <rect x="515" y="162" width="400" height="34" rx="4" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="528" y="178" font-size="12">&lt;document&gt; … &lt;/document&gt;</text>
+  <text x="528" y="191" font-size="11" fill="#0073bb">qualifiers: grounding_source → reference only, not screened</text>
+  <rect x="515" y="202" width="400" height="34" rx="4" fill="#fdecea" stroke="#d13212" stroke-width="2"/>
+  <text x="528" y="218" font-size="12">the question</text>
+  <text x="528" y="231" font-size="11" fill="#d13212">qualifiers: query, guard_content → screened</text>
+  <text x="715" y="262" font-size="12" text-anchor="middle" fill="#1d8102" font-weight="bold">only the customer's words are screened</text>
+  <text x="715" y="280" font-size="11" text-anchor="middle" fill="#555">the trace's guardrailCoverage shows guarded / total characters</text>
+
+  <!-- output -->
+  <rect x="30" y="300" width="900" height="50" rx="6" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="480" y="321" font-size="12" text-anchor="middle" font-weight="bold">Both: the model's answer → output policies (PII masking, topics, content) + contextual grounding</text>
+  <text x="480" y="338" font-size="11" text-anchor="middle" fill="#555">grounding compares the answer with the grounding_source and relevance with the query (tagged request only)</text>
+
+  <!-- flip side -->
+  <rect x="500" y="364" width="430" height="56" rx="6" fill="#fdecea" stroke="#d13212"/>
+  <text x="715" y="385" font-size="12" text-anchor="middle" fill="#d13212" font-weight="bold">The flip side: a poisoned document is never screened</text>
+  <text x="715" y="403" font-size="11" text-anchor="middle" fill="#555">→ screen retrieved text separately: ApplyGuardrail with the doc-screen</text>
+  <line x1="715" y1="350" x2="715" y2="362" stroke="#d13212" marker-end="url(#a)"/>
+  <rect x="30" y="364" width="410" height="56" rx="6" fill="#f4f5f7" stroke="#999"/>
+  <text x="235" y="385" font-size="12" text-anchor="middle" font-weight="bold">Trade-off</text>
+  <text x="235" y="403" font-size="11" text-anchor="middle" fill="#555">untagged: false positives · tagged: an indirect-injection gap</text>
+</svg>

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 330" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="330" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker></defs>
+  <text x="20" y="28" font-size="17" font-weight="bold" fill="#232f3e">Three tiers of rate limiting — what each one counts, and what the client sees</text>
+
+  <!-- row labels -->
+  <text x="20" y="104" font-size="12" font-weight="bold" fill="#555">limits</text>
+  <text x="20" y="152" font-size="12" font-weight="bold" fill="#555">where</text>
+  <text x="20" y="206" font-size="12" font-weight="bold" fill="#555">exceeded</text>
+  <text x="20" y="260" font-size="12" font-weight="bold" fill="#555">nature</text>
+
+  <!-- tier 1 -->
+  <rect x="100" y="45" width="260" height="250" rx="10" fill="#fdecea" stroke="#d13212"/>
+  <text x="230" y="70" font-size="14" text-anchor="middle" font-weight="bold" fill="#d13212">Tier 1 · edge (§3)</text>
+  <text x="230" y="104" font-size="12" text-anchor="middle">requests per tenant (API key)</text>
+  <text x="230" y="145" font-size="12" text-anchor="middle">API Gateway usage plan</text>
+  <text x="230" y="161" font-size="11" text-anchor="middle" fill="#555">token bucket: rate = refill, burst = size</text>
+  <text x="230" y="199" font-size="12" text-anchor="middle">429 from a gateway response</text>
+  <text x="230" y="215" font-size="11" text-anchor="middle" fill="#555">Retry-After: 1 · costs no Lambda</text>
+  <text x="230" y="253" font-size="12" text-anchor="middle">fairness, best effort</text>
+  <text x="230" y="269" font-size="11" text-anchor="middle" fill="#555">enforced per gateway node</text>
+
+  <!-- tier 2 -->
+  <rect x="380" y="45" width="270" height="250" rx="10" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="515" y="70" font-size="14" text-anchor="middle" font-weight="bold" fill="#1d8102">Tier 2 · application (§4)</text>
+  <text x="515" y="104" font-size="12" text-anchor="middle">tokens per tenant per UTC day</text>
+  <text x="515" y="145" font-size="12" text-anchor="middle">API Lambda + DynamoDB ledger</text>
+  <text x="515" y="161" font-size="11" text-anchor="middle" fill="#555">atomic ADD after each call · budget item</text>
+  <text x="515" y="199" font-size="12" text-anchor="middle">429 from our code</text>
+  <text x="515" y="215" font-size="11" text-anchor="middle" fill="#555">Retry-After = seconds to midnight</text>
+  <text x="515" y="253" font-size="12" text-anchor="middle">the money guarantee</text>
+  <text x="515" y="269" font-size="11" text-anchor="middle" fill="#555">a data change, not a deploy</text>
+
+  <!-- tier 3 -->
+  <rect x="670" y="45" width="270" height="250" rx="10" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="805" y="70" font-size="14" text-anchor="middle" font-weight="bold" fill="#c66c00">Tier 3 · model (§2)</text>
+  <text x="805" y="104" font-size="12" text-anchor="middle">concurrent model calls</text>
+  <text x="805" y="145" font-size="12" text-anchor="middle">SQS + event source mapping</text>
+  <text x="805" y="161" font-size="11" text-anchor="middle" fill="#555">MaximumConcurrency 2 (below quota)</text>
+  <text x="805" y="199" font-size="12" text-anchor="middle">no error: the queue grows</text>
+  <text x="805" y="215" font-size="11" text-anchor="middle" fill="#555">waiting time grows instead</text>
+  <text x="805" y="253" font-size="12" text-anchor="middle">capacity = arithmetic</text>
+  <text x="805" y="269" font-size="11" text-anchor="middle" fill="#555">Little's law: λ = c / W</text>
+
+  <line x1="360" y1="315" x2="670" y2="315" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="100" y="319" font-size="11" fill="#555">a request meets them in this order →</text>
+  <text x="940" y="319" font-size="11" text-anchor="end" fill="#555">closer to the model</text>
+</svg>

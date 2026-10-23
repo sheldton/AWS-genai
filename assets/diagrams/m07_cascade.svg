@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 310" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="310" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker></defs>
+  <text x="20" y="28" font-size="17" font-weight="bold" fill="#232f3e">§3 The agreement cascade — escalate only when two cheap models disagree</text>
+  <rect x="20" y="115" width="120" height="56" rx="8" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="80" y="139" font-size="13" text-anchor="middle">task</text><text x="80" y="156" font-size="11" text-anchor="middle" fill="#555">prompt + format</text>
+  <rect x="185" y="60" width="190" height="56" rx="8" fill="#232f3e"/>
+  <text x="280" y="84" font-size="13" text-anchor="middle" fill="#fff">Nova Micro</text><text x="280" y="101" font-size="11" text-anchor="middle" fill="#ddd">forced tool: answer + confidence</text>
+  <rect x="185" y="170" width="190" height="56" rx="8" fill="#232f3e"/>
+  <text x="280" y="194" font-size="13" text-anchor="middle" fill="#fff">Nova Lite</text><text x="280" y="211" font-size="11" text-anchor="middle" fill="#ddd">same tool, a different model</text>
+  <rect x="415" y="115" width="130" height="56" rx="8" fill="#fff" stroke="#232f3e"/>
+  <text x="480" y="139" font-size="13" text-anchor="middle">normalize</text><text x="480" y="156" font-size="11" text-anchor="middle" fill="#555">label · number · JSON</text>
+  <polygon points="650,98 725,143 650,188 575,143" fill="#fff" stroke="#232f3e"/>
+  <text x="650" y="140" font-size="12" text-anchor="middle">values equal</text><text x="650" y="155" font-size="12" text-anchor="middle">and parseable?</text>
+  <rect x="770" y="50" width="170" height="56" rx="8" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="855" y="74" font-size="13" text-anchor="middle" fill="#1d8102" font-weight="bold">serve Micro's answer</text><text x="855" y="91" font-size="11" text-anchor="middle">cost: Micro + Lite</text>
+  <rect x="770" y="180" width="170" height="62" rx="8" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="855" y="200" font-size="13" text-anchor="middle" fill="#c66c00" font-weight="bold">escalate</text><text x="855" y="216" font-size="11" text-anchor="middle">Nova 2 Lite, reasoning on</text><text x="855" y="231" font-size="11" text-anchor="middle">cost: Micro + Lite + strong</text>
+  <line x1="140" y1="135" x2="185" y2="95" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="140" y1="152" x2="185" y2="192" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="375" y1="95" x2="415" y2="132" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="375" y1="192" x2="415" y2="155" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="545" y1="143" x2="575" y2="143" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="700" y1="128" x2="770" y2="82" stroke="#1d8102" marker-end="url(#a)"/><text x="728" y="96" font-size="11" fill="#1d8102">yes</text>
+  <line x1="700" y1="158" x2="770" y2="205" stroke="#c66c00" marker-end="url(#a)"/><text x="722" y="196" font-size="11" fill="#c66c00">no</text>
+  <rect x="20" y="258" width="920" height="42" rx="8" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="480" y="276" font-size="12" text-anchor="middle"><tspan font-weight="bold">Break-even:</tspan> per task the cascade costs c_cheap + e × c_strong (e = escalation rate). It saves money only while</text>
+  <text x="480" y="292" font-size="12" text-anchor="middle">c_strong &gt; c_cheap ÷ (1 − e) — a strong model that is already cheap leaves nothing to save.</text>
+</svg>

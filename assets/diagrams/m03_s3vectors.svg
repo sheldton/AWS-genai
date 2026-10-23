@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="400" fill="#ffffff"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker>
+  </defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">Amazon S3 Vectors — bucket, index, vector, filtered query</text>
+
+  <!-- bucket -->
+  <rect x="20" y="50" width="500" height="330" rx="10" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="35" y="72" font-size="13" font-weight="bold" fill="#c66c00">vector bucket  mlaidp2-m03-&lt;run id&gt;</text>
+  <text x="505" y="72" font-size="11" text-anchor="end" fill="#555">client: s3vectors</text>
+
+  <rect x="35" y="85" width="150" height="62" rx="6" fill="#fff" stroke="#ff9900"/>
+  <text x="110" y="104" font-size="12" text-anchor="middle" font-weight="bold">index: fixed</text>
+  <text x="110" y="120" font-size="11" text-anchor="middle" fill="#555">float32 · 1,024 · cosine</text>
+  <text x="110" y="135" font-size="11" text-anchor="middle" fill="#555">compared in §3</text>
+  <rect x="195" y="85" width="150" height="62" rx="6" fill="#fff" stroke="#ff9900"/>
+  <text x="270" y="104" font-size="12" text-anchor="middle" font-weight="bold">index: semantic</text>
+  <text x="270" y="120" font-size="11" text-anchor="middle" fill="#555">float32 · 1,024 · cosine</text>
+  <text x="270" y="135" font-size="11" text-anchor="middle" fill="#555">compared in §3</text>
+  <rect x="355" y="85" width="150" height="62" rx="6" fill="#fff" stroke="#c66c00" stroke-width="2"/>
+  <text x="430" y="104" font-size="12" text-anchor="middle" font-weight="bold">index: structure</text>
+  <text x="430" y="120" font-size="11" text-anchor="middle" fill="#555">float32 · 1,024 · cosine</text>
+  <text x="430" y="135" font-size="11" text-anchor="middle" fill="#555">§3, and the index of §4</text>
+  <text x="270" y="166" font-size="11" text-anchor="middle" fill="#555">dimension and metric are fixed when the index is created</text>
+
+  <!-- vector record -->
+  <rect x="35" y="180" width="470" height="185" rx="8" fill="#fff" stroke="#232f3e"/>
+  <text x="50" y="202" font-size="13" font-weight="bold">one vector (put_vectors, ≤ 500 per call)</text>
+  <text x="50" y="226" font-size="12" font-weight="bold" fill="#0073bb">key</text>
+  <text x="180" y="226" font-size="12">"claims_handl-002" — unique in the index</text>
+  <text x="50" y="250" font-size="12" font-weight="bold" fill="#0073bb">data</text>
+  <text x="180" y="250" font-size="12">{"float32": [ … 1,024 numbers … ]}</text>
+  <text x="50" y="274" font-size="12" font-weight="bold" fill="#0073bb">metadata</text>
+  <rect x="180" y="284" width="310" height="34" rx="5" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="190" y="305" font-size="12">doc · product · kind</text>
+  <text x="480" y="305" font-size="11" text-anchor="end" fill="#1d8102">filterable (≤ 2 KB)</text>
+  <rect x="180" y="324" width="310" height="34" rx="5" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="190" y="345" font-size="12">text (the chunk)</text>
+  <text x="480" y="345" font-size="11" text-anchor="end" fill="#0073bb">non-filterable, returned only</text>
+  <text x="180" y="274" font-size="11" fill="#555">every key is filterable unless declared otherwise:</text>
+
+  <!-- query -->
+  <rect x="560" y="50" width="380" height="165" rx="10" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="575" y="72" font-size="13" font-weight="bold" fill="#0073bb">query_vectors(</text>
+  <text x="590" y="96" font-size="12">indexName = "structure",</text>
+  <text x="590" y="118" font-size="12">queryVector = {"float32": embed(question)},</text>
+  <text x="590" y="140" font-size="12">topK = 20,</text>
+  <text x="590" y="162" font-size="12" font-weight="bold" fill="#1d8102">filter = {"product": {"$eq": "home"}},</text>
+  <text x="590" y="184" font-size="12">returnDistance = True )</text>
+  <text x="590" y="204" font-size="11" fill="#555">operators: $eq $ne $in $nin $gt $gte $lt $lte $and $or</text>
+  <line x1="560" y1="116" x2="507" y2="116" stroke="#232f3e" marker-end="url(#a)"/>
+
+  <!-- response -->
+  <rect x="560" y="240" width="380" height="140" rx="10" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="575" y="262" font-size="13" font-weight="bold" fill="#1d8102">response</text>
+  <text x="590" y="286" font-size="12">vectors = [{key, distance}, …] — nearest first</text>
+  <text x="590" y="308" font-size="12">the notebook maps key → chunk text locally</text>
+  <text x="590" y="336" font-size="12" font-weight="bold">indexMode ENHANCED:</text>
+  <text x="590" y="356" font-size="12">the filter narrows the candidates before the</text>
+  <text x="590" y="372" font-size="12">nearest-neighbour search → topK matches</text>
+  <line x1="522" y1="300" x2="560" y2="300" stroke="#232f3e" marker-end="url(#a)"/>
+</svg>

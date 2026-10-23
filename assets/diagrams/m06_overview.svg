@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 340" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="340" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker></defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">M06 at a glance — build the controls, attack them, measure both rates, release</text>
+
+  <!-- §1 -->
+  <rect x="20" y="55" width="168" height="210" rx="10" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="104" y="80" font-size="14" font-weight="bold" fill="#0073bb" text-anchor="middle">§1 Guardrail as code</text>
+  <text x="104" y="108" font-size="12" text-anchor="middle">content filters · topics</text>
+  <text x="104" y="125" font-size="12" text-anchor="middle">words · PII · regex</text>
+  <text x="104" y="142" font-size="12" text-anchor="middle">contextual grounding</text>
+  <rect x="34" y="158" width="140" height="34" rx="6" fill="#fff" stroke="#0073bb"/>
+  <text x="104" y="180" font-size="12" text-anchor="middle">ensure_guardrail → v1</text>
+  <text x="104" y="218" font-size="11" text-anchor="middle" fill="#555">ApplyGuardrail probes:</text>
+  <text x="104" y="234" font-size="11" text-anchor="middle" fill="#555">which policy fired?</text>
+
+  <!-- §2 -->
+  <rect x="206" y="55" width="168" height="210" rx="10" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="290" y="80" font-size="14" font-weight="bold" fill="#c66c00" text-anchor="middle">§2 Input tagging</text>
+  <text x="290" y="108" font-size="12" text-anchor="middle">guardContent blocks:</text>
+  <text x="290" y="125" font-size="12" text-anchor="middle">screen the user's words,</text>
+  <text x="290" y="142" font-size="12" text-anchor="middle">not your documents</text>
+  <rect x="220" y="158" width="140" height="34" rx="6" fill="#fdecea" stroke="#d13212"/>
+  <text x="290" y="180" font-size="12" text-anchor="middle" fill="#d13212">flip side: poisoned doc</text>
+  <text x="290" y="218" font-size="11" text-anchor="middle" fill="#555">fix: a narrow doc-screen</text>
+  <text x="290" y="234" font-size="11" text-anchor="middle" fill="#555">guardrail on retrieved text</text>
+
+  <!-- §3 -->
+  <rect x="392" y="55" width="168" height="210" rx="10" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="476" y="80" font-size="14" font-weight="bold" fill="#c66c00" text-anchor="middle">§3 Grounding check</text>
+  <text x="476" y="108" font-size="12" text-anchor="middle">source + query + answer</text>
+  <text x="476" y="125" font-size="12" text-anchor="middle">→ grounding score</text>
+  <text x="476" y="142" font-size="12" text-anchor="middle">→ relevance score</text>
+  <rect x="406" y="158" width="140" height="34" rx="6" fill="#fff" stroke="#ff9900"/>
+  <text x="476" y="180" font-size="12" text-anchor="middle">below threshold → block</text>
+  <text x="476" y="218" font-size="11" text-anchor="middle" fill="#555">four candidate answers,</text>
+  <text x="476" y="234" font-size="11" text-anchor="middle" fill="#555">one near-miss number</text>
+
+  <!-- §4 -->
+  <rect x="578" y="55" width="168" height="210" rx="10" fill="#f4f5f7" stroke="#232f3e"/>
+  <text x="662" y="80" font-size="14" font-weight="bold" fill="#232f3e" text-anchor="middle">§4 Red team × 3</text>
+  <text x="662" y="108" font-size="12" text-anchor="middle">18 attacks · 13 benign</text>
+  <text x="662" y="125" font-size="12" text-anchor="middle">L1 prompt · L2 guardrail</text>
+  <text x="662" y="142" font-size="12" text-anchor="middle">L3 defense in depth</text>
+  <rect x="592" y="158" width="140" height="34" rx="6" fill="#232f3e"/>
+  <text x="662" y="180" font-size="12" text-anchor="middle" fill="#fff">ASR + FPR, 95 % CI</text>
+  <text x="662" y="218" font-size="11" text-anchor="middle" fill="#555">trace: which layer</text>
+  <text x="662" y="234" font-size="11" text-anchor="middle" fill="#555">stopped what · McNemar</text>
+
+  <!-- §5 -->
+  <rect x="764" y="55" width="176" height="210" rx="10" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="852" y="80" font-size="14" font-weight="bold" fill="#1d8102" text-anchor="middle">§5 Improve + gate</text>
+  <text x="852" y="108" font-size="12" text-anchor="middle">threshold sweep</text>
+  <text x="852" y="125" font-size="12" text-anchor="middle">config diff → version 2</text>
+  <text x="852" y="142" font-size="12" text-anchor="middle">re-run the whole suite</text>
+  <rect x="778" y="158" width="148" height="34" rx="6" fill="#fff" stroke="#1d8102"/>
+  <text x="852" y="180" font-size="12" text-anchor="middle" font-weight="bold" fill="#1d8102">release gate</text>
+  <text x="852" y="218" font-size="11" text-anchor="middle" fill="#555">PASS → promote v2</text>
+  <text x="852" y="234" font-size="11" text-anchor="middle" fill="#555">FAIL → keep v1</text>
+
+  <line x1="188" y1="175" x2="205" y2="175" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="374" y1="175" x2="391" y2="175" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="560" y1="175" x2="577" y2="175" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="746" y1="175" x2="763" y2="175" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+  <!-- loop back -->
+  <path d="M852,265 L852,295 L662,295 L662,268" fill="none" stroke="#1d8102" stroke-dasharray="5,4" marker-end="url(#a)"/>
+  <text x="757" y="312" font-size="11" text-anchor="middle" fill="#1d8102">every model, prompt or guardrail change: re-run</text>
+  <text x="20" y="330" font-size="11" fill="#555">Resources: guardrails mlaidp2-m06-claims-shield (v1, v2) and mlaidp2-m06-doc-screen (v1)</text>
+</svg>

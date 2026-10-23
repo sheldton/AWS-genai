@@ -18,6 +18,16 @@
 #
 # > **Resources:** AppConfig application `mlaidp2-m01-router` (environment, hosted configuration profile, deployment
 # > strategy `mlaidp2-m01-instant`), created in the first cell of §2 in a few seconds. The cleanup section deletes it.
+#
+# ![M01 at a glance: §1 evaluation harness feeds §2 gateway, §3 cost](../assets/diagrams/m01_overview.svg)
+#
+# **How to read this notebook**
+# | Marker | Meaning |
+# |---|---|
+# | 💡 **Concept** | the idea behind the next cells, in a few lines |
+# | 🔑 **Key code** | the lines worth reading closely; in the code they are marked `# ▶ KEY` |
+# | 📊 **How to read this** | what the output means and what to look for |
+# | ✅ **Takeaway** | the one thing to remember from a section |
 
 # %% [markdown]
 # ## §0 Setup
@@ -42,6 +52,11 @@ APP, ENV, PROFILE, STRATEGY = "mlaidp2-m01-router", "demo", "routing", "mlaidp2-
 # ## 1 · An evaluation harness: measure, don't guess
 # Twelve tasks from AnyCompany Insurance's support desk. Every task has an answer a **program** can check: a label,
 # extracted fields, an amount computed from the policy, a deadline, a question the document does **not** answer.
+#
+# > 💡 **Concept — why a harness, not a playground.** A playground answer is one sample of one prompt on one model.
+# > A harness runs the *same* task set through *every* candidate with the *same* settings (`temperature 0`, same system
+# > prompt) and grades the answers automatically, so the comparison is repeatable — rerun it next month, or when a new
+# > model ships, and compare like with like. Leaderboards measure someone else's tasks; this measures yours.
 
 # %%
 POLICY = ("AnyCompany Insurance - Home policy HP-2291 (summary). Deductible: 500 USD per claim. The policy pays "
@@ -82,6 +97,10 @@ TASKS = [  # (id, kind, prompt, expected, checker)
 
 # %% [markdown]
 # The graders are code — if you cannot write one, you need a judge model (Module 9).
+#
+# > 🔑 **Key code** — each grader is deliberately *forgiving about format and strict about content*: a label is the
+# > first word (so "CLAIM." and "**CLAIM**" pass), an amount is the *last* number in the answer (models like to show
+# > their working first), and JSON must match field by field. Too strict a grader measures formatting, not knowledge.
 
 # %%
 def check(kind: str, expected, text: str) -> bool:
@@ -101,6 +120,12 @@ m.table([[t[0], t[1], t[2][-90:], t[3]] for t in TASKS], ["Task", "Kind", "Promp
 # One function measures one call. **ConverseStream** gives the time to first token (what a chat user feels); the final
 # `metadata` event carries the token usage. The same request shape works for every provider — that is the abstraction
 # the rest of the demo builds on.
+#
+# > 🔑 **Key code**
+# > - `client.converse_stream(modelId=…, system=…, messages=…, inferenceConfig=…)` — **one request shape for Amazon,
+# >   Meta, Mistral and OpenAI models**. Switching provider means changing one string.
+# > - `contentBlockDelta` events carry the text; the **first** one is the time to first token (TTFT).
+# > - The **last** event, `metadata`, carries `usage` (input/output tokens) — the basis for every dollar figure below.
 
 # %%
 SYSTEM = [{"text": "You are a precise assistant for an insurance company. Follow the output format exactly. "
@@ -108,6 +133,7 @@ SYSTEM = [{"text": "You are a precise assistant for an insurance company. Follow
 
 def converse_measured(model_id: str, prompt: str, *, client=bedrock, max_tokens: int = 300) -> dict:
     t0 = time.perf_counter()
+    # ▶ KEY: the same call for every provider - only modelId changes
     resp = client.converse_stream(modelId=model_id, system=SYSTEM,
                                   messages=[{"role": "user", "content": [{"text": prompt}]}],
                                   inferenceConfig={"maxTokens": max_tokens, "temperature": 0})
@@ -115,9 +141,11 @@ def converse_measured(model_id: str, prompt: str, *, client=bedrock, max_tokens:
     for event in resp["stream"]:
         delta = event.get("contentBlockDelta", {}).get("delta", {})
         if "text" in delta:                                   # reasoning deltas (gpt-oss) are skipped
+            # ▶ KEY: the first text delta = time to first token
             ttft = ttft or (time.perf_counter() - t0) * 1000
             parts.append(delta["text"])
         if "metadata" in event:
+            # ▶ KEY: token usage arrives in the last event of the stream
             usage = event["metadata"]["usage"]
     text = re.sub(r"<thinking>.*?</thinking>\s*", "", "".join(parts), flags=re.S).strip()
     return {"text": text, "ttft_ms": ttft, "latency_ms": (time.perf_counter() - t0) * 1000,
@@ -127,6 +155,8 @@ print(converse_measured(m.NOVA_MICRO, TASKS[1][2]))
 
 # %% [markdown]
 # Now every task on every model — 72 calls, four at a time (the on-demand quotas of a new account are small).
+# An error is recorded as a failed task instead of stopping the run: in a real evaluation a model that throttles or
+# rejects a request *is* a worse choice, and the scorecard should show it.
 
 # %%
 def run_one(pair):
@@ -147,6 +177,12 @@ print(f"{len(RESULTS)} calls in {time.time() - t0:.0f} s")
 # ### The scorecard — with error bars
 # With *n* = 12 an accuracy of 11/12 is not "92 %": the **Wilson score interval** gives the range the true accuracy
 # plausibly lies in. Percentiles of latency need more calls than this to be stable; treat p95 as indicative.
+#
+# > 💡 **Concept — Wilson score interval.** If a model would answer 90 % of *all* possible support tasks correctly, a
+# > sample of 12 tasks can easily show 10/12 or 12/12 by luck. The Wilson interval is the range of true accuracies
+# > that would plausibly produce the score you saw (95 % confidence). It behaves well at small *n* and near 0 % or
+# > 100 %, where the textbook "p ± 1.96·√(p(1−p)/n)" breaks down (it would claim 12/12 has *no* uncertainty).
+# > Rule of thumb: **when two intervals overlap a lot, the data does not tell the models apart.**
 
 # %%
 def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
@@ -175,9 +211,23 @@ m.table([{k: v for k, v in s.items() if k != "id"} for s in SCORE],
              "$ / 1k tasks": "${:.3f}"})
 
 # %% [markdown]
+# > 📊 **How to read this** — rows are sorted by cost, cheapest first. Read across: *correct* and its **95 % CI**
+# > (quality), **TTFT** (how fast a chat user sees the first word), **latency p50/p95** (the whole answer — models that
+# > reason before answering, such as gpt-oss, have a long tail), **$ / 1k tasks** (from the measured tokens), and
+# > **failed** (which tasks — the pattern matters more than the count: a model that fails all the math tasks is a
+# > routing decision, not a reject). Price differences between models are often 10–20×; accuracy differences on
+# > this set are a few tasks.
+
+# %% [markdown]
 # ### Is the best model *significantly* better than the cheapest good one?
 # Both models answered the **same** tasks, so compare them **paired**: only the tasks where they disagree carry
 # information. McNemar's exact test asks how likely that split of disagreements is if the two models were equally good.
+#
+# > 💡 **Concept — paired comparison.** Tasks both models get right (or both get wrong) say nothing about which model
+# > is better. Only the *discordant* tasks count: "A right, B wrong" vs "B right, A wrong". If the models were equally
+# > good, each discordant task would be a coin flip — so 1 vs 0 discordant tasks is entirely consistent with chance
+# > (p = 1.0), while 9 vs 1 would not be (p ≈ 0.02). The **p-value** is the probability of a split at least this lopsided
+# > if the models were equally good; below 0.05 we call the difference significant.
 
 # %%
 def mcnemar_exact(a_id: str, b_id: str):
@@ -227,6 +277,12 @@ ax.set_title(f"Only {len(FRONT)} of {len(SCORE)} models are on the frontier - th
 plt.tight_layout(); plt.show()
 
 # %% [markdown]
+# > 📊 **How to read this** — x = cost (log scale: each grid step is 10× more expensive), y = accuracy, bubble size =
+# > p50 latency. Blue points joined by the dashed line are the **Pareto frontier**: for each of them, no other model is
+# > both cheaper and at least as accurate. Every grey point is *dominated* — some blue point beats it on both axes.
+# > The frontier does not pick a winner; it removes the losers. Which blue point to choose is a business decision
+# > (how much is one more correct task per 12 worth?).
+#
 # Accuracy per task kind is the input for **routing**: the cheapest model that got every task of a kind right.
 
 # %%
@@ -250,12 +306,24 @@ m.table([[k, ", ".join(m.model_name(x) for x in v) or "– none –"] for k, v i
 # - Which of these numbers changes at 10× the traffic — and which one does not?
 # - Why is TTFT, not total latency, the number for a chat UI — and the wrong number for a batch job?
 # </details>
+#
+# > ✅ **Takeaway §1** — Choose models with your own graded tasks, report intervals not points, compare models paired,
+# > and discard dominated models. Twelve tasks are enough to find the losers, not to crown a winner.
 
 # %% [markdown]
 # ## 2 · A provider-agnostic gateway
 # The application never names a model. It names a **route** (`classify`, `answer`); the gateway resolves the route
 # through a routing table that lives in **AWS AppConfig** — validated by a JSON schema, deployed in seconds, no code
 # release. The same document also carries the retry and breaker settings, and a fault-injection switch for this demo.
+#
+# ![What happens to one request in Gateway.invoke](../assets/diagrams/m01_gateway_flow.svg)
+#
+# > 💡 **Concept — AWS AppConfig in four objects.** An **application** (`mlaidp2-m01-router`) has **environments**
+# > (`classroom`) and **configuration profiles** (`routing`, a *hosted* JSON document with a JSON-schema validator).
+# > Each change is a new immutable **hosted configuration version**; a **deployment** pushes one version to one
+# > environment following a **deployment strategy** (here: all at once, no bake time). Clients read through the
+# > separate **AppConfigData** API, which hands out the newest deployed version and tells the client how long to wait
+# > before polling again. A bad version can be rolled back by deploying the previous one — no code release.
 
 # %%
 ROUTING = {
@@ -292,15 +360,20 @@ print("application", app_id, "· environment", env_id, "· profile", prof_id, "�
 # %% [markdown]
 # Publishing = a new **hosted configuration version** (validated against the schema) + a **deployment** to the
 # environment. A real rollout would use a linear strategy with a bake time and a CloudWatch alarm for automatic rollback.
+#
+# > 🔑 **Key code** — `create_hosted_configuration_version(...)` stores (and validates) the document;
+# > `start_deployment(...)` makes it live; the `wait_for` loop polls `get_deployment` until the state is `COMPLETE`.
 
 # %%
 def publish(config: dict, description: str) -> int:
     # the document carries its own version number, so a client can tell which version it is running
     latest = appconfig.list_hosted_configuration_versions(ApplicationId=app_id, ConfigurationProfileId=prof_id)["Items"]
     doc = {**config, "version": max([v["VersionNumber"] for v in latest] or [0]) + 1}
+    # ▶ KEY: a new immutable version - rejected here if it fails the JSON-schema validator
     version = appconfig.create_hosted_configuration_version(
         ApplicationId=app_id, ConfigurationProfileId=prof_id, Content=json.dumps(doc).encode(),
         ContentType="application/json", Description=description)["VersionNumber"]
+    # ▶ KEY: the deployment makes that version the live one for the environment
     dep = appconfig.start_deployment(ApplicationId=app_id, EnvironmentId=env_id, DeploymentStrategyId=strat_id,
                                      ConfigurationProfileId=prof_id, ConfigurationVersion=str(version),
                                      Description=description)
@@ -312,6 +385,12 @@ def publish(config: dict, description: str) -> int:
 # %% [markdown]
 # The client side reads through **AppConfigData**: a session token, polled no faster than the interval the service
 # returns. The document carries its own `version`, so the client can tell when a deployment has reached it.
+#
+# > 🔑 **Key code** — `start_configuration_session` returns a token; each `get_latest_configuration` returns the next
+# > token, the poll interval, and a body that is **empty when nothing changed** (cheap polling). Two traps handled here:
+# > polling earlier than `NextPollIntervalInSeconds` is rejected ("Request too early"), so a forced reload opens a new
+# > session; and a deployment that is `COMPLETE` reaches the data plane a few seconds later, so `wait_for_version`
+# > waits until the client actually sees the new version.
 
 # %%
 class RoutingConfig:
@@ -321,6 +400,7 @@ class RoutingConfig:
         self.refresh_now()
     def get(self) -> dict:
         if time.time() >= self.next_poll:
+            # ▶ KEY: each poll hands back the token for the next poll and how long to wait
             r = appconfigdata.get_latest_configuration(ConfigurationToken=self.token)
             self.token, self.next_poll = r["NextPollConfigurationToken"], time.time() + r["NextPollIntervalInSeconds"]
             body = r["Configuration"].read()
@@ -357,6 +437,18 @@ print(json.dumps(CONFIG.get()["routes"], indent=1))
 # - **fail over** to the next model when retries are exhausted or the model's breaker is open;
 # - **fail** immediately when the request itself is wrong (`ValidationException`, `AccessDeniedException`): sending a bad
 #   request to the next provider only fails again — and costs money.
+#
+# > 💡 **Concept — full jitter.** After the *n*-th failure, wait a random time between 0 and `min(cap, base·2ⁿ)`.
+# > Exponential growth gives a struggling service room to recover; the randomness spreads a fleet of clients out, so
+# > they do not all retry at the same instant and knock the service over again (the "thundering herd").
+#
+# ![Circuit breaker states: CLOSED, OPEN, HALF_OPEN](../assets/diagrams/m01_breaker.svg)
+#
+# > 💡 **Concept — circuit breaker.** Retries help with *short* glitches; during a real outage they make every request
+# > slow (each one waits for its retries to fail). The breaker remembers: after `failures_to_open` failed requests it
+# > **opens** and the gateway skips that model instantly; after `open_seconds` it goes **half-open** and lets one probe
+# > through — success closes it, failure opens it again. One breaker per model, so one bad provider does not take the
+# > others down with it.
 
 # %%
 RETRYABLE = {"ThrottlingException", "ServiceUnavailableException", "InternalServerException", "ModelNotReadyException",
@@ -365,10 +457,11 @@ FATAL = {"ValidationException", "AccessDeniedException", "ResourceNotFoundExcept
 
 def classify(err: Exception) -> str:
     code = m.error_code(err) if isinstance(err, ClientError) else "ReadTimeout"
+    # ▶ KEY: three reactions - our bug: fail; transient: retry; anything else: try the next model
     return "fail" if code in FATAL else "retry" if code in RETRYABLE else "failover"
 
 def backoff(attempt: int, base: float, cap: float) -> float:
-    return random.uniform(0, min(cap, base * 2 ** attempt))           # "full jitter"
+    return random.uniform(0, min(cap, base * 2 ** attempt))           # ▶ KEY: "full jitter"
 
 class CircuitBreaker:
     """CLOSED --n failures--> OPEN --open_seconds--> HALF_OPEN --success--> CLOSED / --failure--> OPEN"""
@@ -376,7 +469,7 @@ class CircuitBreaker:
         self.state, self.failures, self.opened_at = "CLOSED", 0, 0.0
     def allow(self, cfg) -> bool:
         if self.state == "OPEN" and time.time() - self.opened_at >= cfg["open_seconds"]:
-            self.state = "HALF_OPEN"                                 # let exactly one probe through
+            self.state = "HALF_OPEN"                                 # ▶ KEY: let exactly one probe through
         return self.state != "OPEN"
     def record(self, ok: bool, cfg):
         if ok:
@@ -399,6 +492,11 @@ def call_model(model_id: str, messages: list, max_tokens: int, fault: dict) -> d
 
 # %% [markdown]
 # The gateway: walk the route's fallback chain; per model ask the breaker, retry what is transient, fail over or fail.
+#
+# > 🔑 **Key code** — two nested loops are the whole policy: the **outer** loop walks the fallback chain
+# > (`for model_id in r_cfg["models"]`), the **inner** loop retries one model (`for attempt in range(...)`). The breaker
+# > is consulted before the inner loop and updated after it. Note the client: `bare_client` has **SDK retries switched
+# > off** — two retry layers would multiply (3 SDK attempts × 2 gateway attempts = 6 calls per model).
 
 # %%
 class Gateway:
@@ -410,6 +508,7 @@ class Gateway:
         r_cfg, messages = cfg["routes"][route], [{"role": "user", "content": [{"text": prompt}]}]
         for model_id in r_cfg["models"]:
             br = self.breakers.setdefault(model_id, CircuitBreaker())
+            # ▶ KEY: an OPEN breaker skips the model without calling it
             if not br.allow(cfg["breaker"]):
                 trail.append(f"{m.model_name(model_id)}: breaker OPEN, skipped"); continue
             for attempt in range(cfg["retry"]["attempts"]):
@@ -420,6 +519,7 @@ class Gateway:
                     trail.append(f"{m.model_name(model_id)}: OK")
                     return self._done(route, model_id, t0, trail, m.text_of(resp))
                 except (ClientError, ReadTimeoutError, ConnectTimeoutError) as e:
+                    # ▶ KEY: the error class decides: fail now, retry this model, or move to the next one
                     action = classify(e)
                     code = m.error_code(e) if isinstance(e, ClientError) else "timeout"
                     trail.append(f"{m.model_name(model_id)}: {code} → {action}")
@@ -464,6 +564,12 @@ print(f"✓ breaker opened after {ROUTING['breaker']['failures_to_open']} failed
       if opened else "✗ breaker did not open - check the trail column")
 
 # %% [markdown]
+# > 📊 **How to read this** — one row per request. **trail** is the story: each model tried, the error and the reaction
+# > (`→ retry`, `→ failover`). Requests before the breaker opens pay for two failed attempts (2 × 3 s injected delay
+# > plus backoff) before Mistral answers; once **breakers** shows `Nova Pro=OPEN`, the trail says "breaker OPEN,
+# > skipped" and the request costs only Mistral's own latency. Same outage, same answers — very different user
+# > experience.
+#
 # > **Think about it:** Compare the `ms` column of the first and the last requests. Where did the time go — and what
 # > would the user have seen with retries but **no** breaker?
 #
@@ -476,6 +582,8 @@ print(f"✓ breaker opened after {ROUTING['breaker']['failures_to_open']} failed
 # %% [markdown]
 # Wait for the breaker's open period: the next request is a **half-open probe**. The fault is still there, so it opens
 # again. Then the provider recovers — the next probe closes the breaker.
+#
+# > ⏱️ This cell prints nothing for about 55 s (two 21-second waits for the open period, plus one deployment).
 
 # %%
 time.sleep(ROUTING["breaker"]["open_seconds"] + 1)
@@ -501,6 +609,10 @@ print("✓ failed fast, no failover" if fast_fail else "✗ " + bad["trail"])
 # ## 3 · What it costs per month
 # Use the measured $/task of §1 and a traffic mix to compare "the best model for everything" with the routed workload.
 # Assumption (change it): 2 million requests a month, 70 % classification/extraction, 30 % policy questions.
+#
+# > 💡 **Concept — cost = volume × mix × $/task.** The $/task comes from *measured* tokens (prompt + answer, including
+# > any reasoning tokens a model spends), not from the price sheet alone: a cheap model that writes long answers can
+# > cost more per task than an expensive one that answers in one word. Change `MONTHLY` and `MIX` to your own traffic.
 
 # %%
 MONTHLY, MIX = 2_000_000, {"classify": 0.40, "extract": 0.30, "math": 0.15, "reason": 0.10, "grounded": 0.05}
@@ -520,8 +632,25 @@ m.table([[k, f"{share:.0%}", m.model_name(best["id"]), m.model_name(routed_model
 print(f"single model: ${single:,.0f}/month   routed: ${routed:,.0f}/month   saving {1 - routed / single:.0%}")
 
 # %% [markdown]
+# > 📊 **How to read this** — the table shows which model each task kind is routed to; "Single model" uses the most
+# > accurate model everywhere. The saving comes from sending the high-volume, easy kinds (classification) to a cheap
+# > model and keeping the expensive model only where nothing cheaper got every task right.
+
+# %% [markdown]
 # > **Think about it:** The routed bill depends on 12 tasks. Which number on this page would you re-measure first
 # > before showing it to a CFO?
+#
+# > ✅ **Takeaway §2–§3** — The application asks for a *route*; configuration picks the model; the gateway owns the
+# > failure policy (retry the transient, fail over the exhausted, fail fast on our own bugs, and stop calling a provider
+# > that is down). Routing by task kind is also the biggest cost lever you control.
+#
+# ## Summary — what you built
+# | Piece | AWS API / pattern | Production next step |
+# |---|---|---|
+# | Evaluation harness | `ConverseStream`, code graders, Wilson CI, McNemar | a larger golden set and Amazon Bedrock Evaluations (Module 9) |
+# | Routing table | AWS AppConfig hosted configuration + JSON schema + deployment | linear deployment strategy with an alarm for automatic rollback |
+# | Gateway | error classification, full-jitter backoff, fallback chain | run it in AWS Lambda or a container behind API Gateway (Module 10) |
+# | Circuit breaker | per-model state machine | shared state (e.g. Amazon DynamoDB / ElastiCache) across instances, CloudWatch metrics on state changes (Module 8) |
 
 # %% [markdown]
 # ## Cleanup — don't skip this

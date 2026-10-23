@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 410" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="410" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker><marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d13212"/></marker><marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1d8102"/></marker></defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">One tool call through AgentCore Gateway — who checks what</text>
+  <!-- agent -->
+  <rect x="20" y="100" width="180" height="90" rx="8" fill="#232f3e"/>
+  <text x="110" y="127" font-size="14" text-anchor="middle" fill="#fff" font-weight="bold">Strands agent</text>
+  <text x="110" y="146" font-size="11" text-anchor="middle" fill="#ddd">in the notebook (prod: Runtime)</text>
+  <text x="110" y="163" font-size="11" text-anchor="middle" fill="#ddd">Nova 2 Lite / Nova Pro</text>
+  <text x="110" y="180" font-size="11" text-anchor="middle" fill="#ddd">MCPClient + SigV4</text>
+  <!-- gateway -->
+  <rect x="290" y="80" width="230" height="130" rx="8" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="405" y="104" font-size="14" text-anchor="middle" font-weight="bold" fill="#c66c00">AgentCore Gateway</text>
+  <text x="405" y="124" font-size="11" text-anchor="middle">inbound auth: AWS_IAM (SigV4)</text>
+  <text x="405" y="141" font-size="11" text-anchor="middle">protocol MCP · semantic search</text>
+  <text x="405" y="158" font-size="11" text-anchor="middle">tool name = target___tool</text>
+  <text x="405" y="175" font-size="11" text-anchor="middle" fill="#555">Underwriting___bind_policy</text>
+  <text x="405" y="197" font-size="11" text-anchor="middle" fill="#555">exceptionLevel DEBUG</text>
+  <line x1="200" y1="145" x2="290" y2="145" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="245" y="137" font-size="11" text-anchor="middle">tools/call</text>
+  <!-- policy engine -->
+  <rect x="290" y="265" width="230" height="90" rx="8" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="405" y="289" font-size="14" text-anchor="middle" font-weight="bold" fill="#0073bb">Policy engine (Cedar)</text>
+  <text x="405" y="308" font-size="11" text-anchor="middle">default deny · when { context.input… }</text>
+  <text x="405" y="325" font-size="11" text-anchor="middle">mode LOG_ONLY or ENFORCE</text>
+  <text x="405" y="342" font-size="11" text-anchor="middle" fill="#555">attached with UpdateGateway</text>
+  <line x1="370" y1="210" x2="370" y2="265" stroke="#232f3e" marker-end="url(#a)"/><text x="364" y="242" font-size="11" text-anchor="end">AuthorizeAction</text>
+  <line x1="440" y1="265" x2="440" y2="210" stroke="#232f3e" marker-end="url(#a)"/><text x="446" y="242" font-size="11">allow / deny</text>
+  <!-- lambda -->
+  <rect x="640" y="80" width="300" height="130" rx="8" fill="#f1f8fd" stroke="#232f3e"/>
+  <text x="790" y="104" font-size="14" text-anchor="middle" font-weight="bold" fill="#232f3e">Lambda (target Underwriting)</text>
+  <text x="790" y="124" font-size="11" text-anchor="middle">get_customer · get_quote · bind_policy</text>
+  <text x="790" y="148" font-size="11" text-anchor="middle">bind_policy re-derives the premium</text>
+  <text x="790" y="164" font-size="11" text-anchor="middle">from its own HMAC-signed quote id</text>
+  <text x="790" y="188" font-size="11" text-anchor="middle" fill="#555">BOUND or REJECTED (PREMIUM_MISMATCH …)</text>
+  <line x1="520" y1="145" x2="640" y2="145" stroke="#1d8102" marker-end="url(#g)"/>
+  <text x="580" y="128" font-size="11" text-anchor="middle" fill="#1d8102">allowed only</text>
+  <text x="580" y="164" font-size="11" text-anchor="middle" fill="#555">gateway role:</text>
+  <text x="580" y="178" font-size="11" text-anchor="middle" fill="#555">InvokeFunction</text>
+  <!-- cloudwatch -->
+  <rect x="640" y="245" width="300" height="46" rx="8" fill="#fff" stroke="#232f3e"/>
+  <text x="790" y="265" font-size="12" text-anchor="middle" font-weight="bold">CloudWatch Logs</text>
+  <text x="790" y="282" font-size="11" text-anchor="middle" fill="#555">one BIND line per executed bind = ground truth</text>
+  <line x1="790" y1="210" x2="790" y2="245" stroke="#232f3e" marker-end="url(#a)"/>
+  <rect x="640" y="315" width="300" height="46" rx="8" fill="#fff" stroke="#232f3e"/>
+  <text x="790" y="335" font-size="12" text-anchor="middle" font-weight="bold">CloudWatch metrics AWS/Bedrock-AgentCore</text>
+  <text x="790" y="352" font-size="11" text-anchor="middle" fill="#555">AllowDecisions / DenyDecisions by Mode</text>
+  <line x1="520" y1="330" x2="640" y2="338" stroke="#232f3e" marker-end="url(#a)"/>
+  <!-- deny path -->
+  <path d="M290,320 L110,320 L110,190" fill="none" stroke="#d13212" stroke-dasharray="5,4" marker-end="url(#r)"/>
+  <text x="122" y="340" font-size="11" fill="#d13212">ENFORCE deny → JSON-RPC error</text>
+  <text x="122" y="355" font-size="11" fill="#d13212">"Tool Execution Denied"</text>
+  <text x="122" y="370" font-size="11" fill="#d13212">the Lambda is never invoked</text>
+  <text x="20" y="398" font-size="11" fill="#555">LOG_ONLY: the decision is only recorded in the metrics — the call goes through either way.</text>
+</svg>

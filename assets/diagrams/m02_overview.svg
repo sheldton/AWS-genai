@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 380" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="380" fill="#ffffff"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d13212"/></marker>
+  </defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">M02 at a glance — three sources in, one checked claim record out</text>
+
+  <!-- §1 inputs -->
+  <rect x="20" y="50" width="180" height="250" rx="10" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="35" y="72" font-size="13" font-weight="bold" fill="#0073bb">§1 One claim, 3 sources</text>
+  <rect x="35" y="85" width="150" height="46" rx="6" fill="#fff" stroke="#0073bb"/>
+  <text x="110" y="104" font-size="13" text-anchor="middle">Form image</text><text x="110" y="121" font-size="11" text-anchor="middle" fill="#555">PNG, scanned</text>
+  <rect x="35" y="155" width="150" height="46" rx="6" fill="#fff" stroke="#0073bb"/>
+  <text x="110" y="174" font-size="13" text-anchor="middle">Call audio</text><text x="110" y="191" font-size="11" text-anchor="middle" fill="#555">MP3 in the S3 bucket</text>
+  <rect x="35" y="230" width="150" height="46" rx="6" fill="#fff" stroke="#0073bb"/>
+  <text x="110" y="249" font-size="13" text-anchor="middle">Email</text><text x="110" y="266" font-size="11" text-anchor="middle" fill="#555">plain text</text>
+
+  <!-- transcribe + comprehend -->
+  <rect x="235" y="150" width="185" height="56" rx="6" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="327" y="170" font-size="13" text-anchor="middle" font-weight="bold">Amazon Transcribe</text>
+  <text x="327" y="186" font-size="11" text-anchor="middle" fill="#555">batch job · scoped PII redaction</text>
+  <text x="327" y="199" font-size="11" text-anchor="middle" fill="#555">word confidences</text>
+  <rect x="235" y="225" width="185" height="70" rx="6" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="327" y="243" font-size="13" text-anchor="middle" font-weight="bold">§2 Amazon Comprehend</text>
+  <text x="327" y="259" font-size="11" text-anchor="middle" fill="#555">DetectPiiEntities offsets</text>
+  <text x="327" y="273" font-size="11" text-anchor="middle" fill="#555">→ [NAME_1] tokens + vault</text>
+  <text x="327" y="287" font-size="11" text-anchor="middle" fill="#555">leak assertion</text>
+  <line x1="185" y1="178" x2="235" y2="178" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="327" y1="206" x2="327" y2="225" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="185" y1="253" x2="235" y2="253" stroke="#232f3e" marker-end="url(#a)"/>
+
+  <!-- form image bypass -->
+  <line x1="185" y1="108" x2="460" y2="108" stroke="#d13212" stroke-dasharray="5,3" marker-end="url(#r)"/>
+  <text x="322" y="100" font-size="11" text-anchor="middle" fill="#d13212">image bytes — not PII-screened</text>
+
+  <!-- §3 contract -->
+  <rect x="460" y="50" width="225" height="250" rx="10" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="475" y="72" font-size="13" font-weight="bold" fill="#c66c00">§3 Extraction contract</text>
+  <rect x="475" y="88" width="195" height="40" rx="6" fill="#232f3e"/>
+  <text x="572" y="105" font-size="12" text-anchor="middle" fill="#fff">Bedrock Converse (Nova Lite)</text>
+  <text x="572" y="120" font-size="11" text-anchor="middle" fill="#fff">forced tool: record_claim</text>
+  <rect x="475" y="143" width="195" height="40" rx="6" fill="#fff" stroke="#ff9900"/>
+  <text x="572" y="160" font-size="12" text-anchor="middle">jsonschema validation</text>
+  <text x="572" y="175" font-size="11" text-anchor="middle" fill="#555">in code, every record</text>
+  <rect x="475" y="198" width="195" height="40" rx="6" fill="#fff" stroke="#ff9900"/>
+  <text x="572" y="215" font-size="12" text-anchor="middle">repair turn (≤ 3 attempts)</text>
+  <text x="572" y="230" font-size="11" text-anchor="middle" fill="#555">failed toolResult → model</text>
+  <text x="572" y="262" font-size="11" text-anchor="middle" fill="#555">lineage on every record:</text>
+  <text x="572" y="277" font-size="11" text-anchor="middle" fill="#555">schema · model · prompt hash</text>
+  <line x1="572" y1="128" x2="572" y2="143" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="572" y1="183" x2="572" y2="198" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="420" y1="253" x2="460" y2="253" stroke="#232f3e" marker-end="url(#a)"/>
+  <text x="440" y="244" font-size="10" text-anchor="middle" fill="#555">text</text>
+
+  <!-- §4 reconcile -->
+  <rect x="725" y="50" width="215" height="120" rx="10" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="740" y="72" font-size="13" font-weight="bold" fill="#1d8102">§4 Reconciliation</text>
+  <text x="832" y="94" font-size="11" text-anchor="middle" fill="#333">normalize · one rule per field</text>
+  <text x="832" y="109" font-size="11" text-anchor="middle" fill="#333">material field disagrees?</text>
+  <rect x="736" y="122" width="84" height="34" rx="6" fill="#fff" stroke="#1d8102"/>
+  <text x="778" y="143" font-size="11" text-anchor="middle">AUTOMATED</text>
+  <rect x="828" y="122" width="104" height="34" rx="6" fill="#fdecea" stroke="#d13212"/>
+  <text x="880" y="143" font-size="11" text-anchor="middle">HUMAN_REVIEW</text>
+
+  <!-- §5 gate -->
+  <rect x="725" y="185" width="215" height="115" rx="10" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="740" y="207" font-size="13" font-weight="bold" fill="#1d8102">§5 Quality gate (batch)</text>
+  <text x="832" y="228" font-size="11" text-anchor="middle" fill="#333">10 emails · DQDL-style rules</text>
+  <text x="832" y="243" font-size="11" text-anchor="middle" fill="#333">+ policy-register rules</text>
+  <rect x="736" y="255" width="84" height="34" rx="6" fill="#fff" stroke="#1d8102"/>
+  <text x="778" y="276" font-size="11" text-anchor="middle">S3 accept/</text>
+  <rect x="828" y="255" width="104" height="34" rx="6" fill="#fdecea" stroke="#d13212"/>
+  <text x="880" y="276" font-size="11" text-anchor="middle">S3 quarantine/</text>
+
+  <line x1="685" y1="110" x2="725" y2="110" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="685" y1="240" x2="725" y2="240" stroke="#232f3e" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- §6 -->
+  <rect x="20" y="320" width="920" height="44" rx="10" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="35" y="347" font-size="13" font-weight="bold" fill="#0073bb">§6 Token economics</text>
+  <text x="200" y="347" font-size="12" fill="#333">the same form at 4 widths × 2 Nova models → input tokens, fields right, $ per 1M forms · cost of the tool definition per call</text>
+</svg>

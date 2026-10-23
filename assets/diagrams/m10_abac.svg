@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="420" fill="#ffffff"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1d8102"/></marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d13212"/></marker>
+  </defs>
+  <text x="20" y="28" font-size="17" font-weight="bold" fill="#232f3e">ABAC — one role for every tenant; the tags decide</text>
+
+  <!-- developer -->
+  <rect x="20" y="60" width="150" height="70" rx="8" fill="#f4f5f7" stroke="#232f3e"/>
+  <text x="95" y="84" font-size="13" text-anchor="middle" font-weight="bold">Developer</text>
+  <text x="95" y="101" font-size="11" text-anchor="middle" fill="#555">sts:AssumeRole</text>
+  <text x="95" y="116" font-size="11" text-anchor="middle" fill="#555">+ session tag Tenant=gold</text>
+
+  <!-- trust policy -->
+  <rect x="215" y="55" width="200" height="80" rx="8" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="315" y="77" font-size="12" text-anchor="middle" font-weight="bold">trust policy</text>
+  <text x="315" y="95" font-size="11" text-anchor="middle" fill="#555">Null aws:RequestTag/Tenant</text>
+  <text x="315" y="110" font-size="11" text-anchor="middle" fill="#555">= false</text>
+  <text x="315" y="126" font-size="11" text-anchor="middle" fill="#d13212">no Tenant tag → AccessDenied</text>
+
+  <!-- session -->
+  <rect x="460" y="60" width="200" height="70" rx="8" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="560" y="84" font-size="12" text-anchor="middle" font-weight="bold">role session</text>
+  <text x="560" y="101" font-size="11" text-anchor="middle" fill="#555">mlaidp2-m10-tenant-consumer</text>
+  <text x="560" y="116" font-size="11" text-anchor="middle" fill="#0073bb">aws:PrincipalTag/Tenant = gold</text>
+
+  <!-- call -->
+  <rect x="705" y="60" width="235" height="70" rx="8" fill="#232f3e"/>
+  <text x="822" y="84" font-size="12" text-anchor="middle" fill="#fff" font-weight="bold">bedrock-runtime Converse</text>
+  <text x="822" y="101" font-size="11" text-anchor="middle" fill="#ddd">modelId = some profile or model</text>
+  <text x="822" y="116" font-size="11" text-anchor="middle" fill="#ddd">guardrailConfig = ?</text>
+
+  <line x1="170" y1="95" x2="215" y2="95" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="415" y1="95" x2="460" y2="95" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="660" y1="95" x2="705" y2="95" stroke="#232f3e" marker-end="url(#a)"/>
+
+  <!-- policy evaluation -->
+  <rect x="20" y="165" width="600" height="235" rx="10" fill="#f4f5f7" stroke="#232f3e"/>
+  <text x="35" y="188" font-size="13" font-weight="bold" fill="#232f3e">IAM evaluates the permission policy "abac-models" (no tenant name in it)</text>
+  <rect x="35" y="200" width="570" height="52" rx="6" fill="#fdecea" stroke="#d13212"/>
+  <text x="48" y="221" font-size="12" font-weight="bold" fill="#d13212">Deny</text>
+  <text x="95" y="221" font-size="11">bedrock:GuardrailIdentifier ≠ company guardrail:1 → explicit deny</text>
+  <text x="95" y="239" font-size="11">aws:TagKeys contains "Tenant" (tag / untag) → explicit deny</text>
+  <rect x="35" y="262" width="570" height="52" rx="6" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="48" y="283" font-size="12" font-weight="bold" fill="#1d8102">Allow</text>
+  <text x="95" y="283" font-size="11">application-inference-profile/* where</text>
+  <text x="95" y="301" font-size="11">aws:ResourceTag/Tenant = ${aws:PrincipalTag/Tenant}</text>
+  <rect x="35" y="324" width="570" height="52" rx="6" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="48" y="345" font-size="12" font-weight="bold" fill="#1d8102">Allow</text>
+  <text x="95" y="345" font-size="11">the foundation model / system profile behind it — only when</text>
+  <text x="95" y="363" font-size="11">bedrock:InferenceProfileArn is an application profile</text>
+  <text x="320" y="394" font-size="11" text-anchor="middle" fill="#555">explicit deny beats any allow · nothing matched → implicit deny ("no allow")</text>
+
+  <!-- outcomes -->
+  <rect x="660" y="165" width="280" height="235" rx="10" fill="#fff" stroke="#232f3e"/>
+  <text x="675" y="188" font-size="13" font-weight="bold" fill="#232f3e">Outcome for Tenant=gold</text>
+  <rect x="675" y="200" width="250" height="40" rx="6" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="800" y="217" font-size="11" text-anchor="middle">gold profile (Tenant=gold) + guardrail</text>
+  <text x="800" y="232" font-size="11" text-anchor="middle" fill="#1d8102" font-weight="bold">ALLOW</text>
+  <rect x="675" y="250" width="250" height="40" rx="6" fill="#fdecea" stroke="#d13212"/>
+  <text x="800" y="267" font-size="11" text-anchor="middle">bronze profile (Tenant=bronze)</text>
+  <text x="800" y="282" font-size="11" text-anchor="middle" fill="#d13212" font-weight="bold">DENY — no allow</text>
+  <rect x="675" y="300" width="250" height="40" rx="6" fill="#fdecea" stroke="#d13212"/>
+  <text x="800" y="317" font-size="11" text-anchor="middle">own profile, no guardrail</text>
+  <text x="800" y="332" font-size="11" text-anchor="middle" fill="#d13212" font-weight="bold">DENY — explicit deny</text>
+  <rect x="675" y="350" width="250" height="40" rx="6" fill="#fdecea" stroke="#d13212"/>
+  <text x="800" y="367" font-size="11" text-anchor="middle">model id directly (us.… / Nova Pro)</text>
+  <text x="800" y="382" font-size="11" text-anchor="middle" fill="#d13212" font-weight="bold">DENY — no allow</text>
+
+  <line x1="822" y1="130" x2="822" y2="165" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="620" y1="282" x2="660" y2="282" stroke="#232f3e" marker-end="url(#a)"/>
+</svg>

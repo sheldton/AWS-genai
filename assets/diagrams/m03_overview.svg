@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="400" fill="#ffffff"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker>
+  </defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#232f3e">M03 at a glance — build retrieval layer by layer, measure every layer</text>
+
+  <text x="20" y="56" font-size="12" font-weight="bold" fill="#555">INGESTION (once per corpus change)</text>
+  <rect x="20" y="66" width="160" height="70" rx="6" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="100" y="88" font-size="13" text-anchor="middle" font-weight="bold">§0 Corpus</text>
+  <text x="100" y="105" font-size="11" text-anchor="middle" fill="#555">3 documents in S3</text>
+  <text x="100" y="120" font-size="11" text-anchor="middle" fill="#555">product: home | motor</text>
+
+  <rect x="215" y="66" width="200" height="70" rx="6" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="315" y="88" font-size="13" text-anchor="middle" font-weight="bold">§1 Three chunkers</text>
+  <text x="315" y="105" font-size="11" text-anchor="middle" fill="#555">fixed · structure (+ header)</text>
+  <text x="315" y="120" font-size="11" text-anchor="middle" fill="#555">semantic (sentence similarity)</text>
+
+  <rect x="450" y="66" width="170" height="70" rx="6" fill="#232f3e"/>
+  <text x="535" y="92" font-size="13" text-anchor="middle" fill="#fff" font-weight="bold">Titan Text</text>
+  <text x="535" y="108" font-size="13" text-anchor="middle" fill="#fff" font-weight="bold">Embeddings V2</text>
+  <text x="535" y="124" font-size="11" text-anchor="middle" fill="#fff">1,024 dims, normalised</text>
+
+  <rect x="655" y="66" width="285" height="70" rx="6" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="797" y="88" font-size="13" text-anchor="middle" font-weight="bold">§2 Amazon S3 Vectors</text>
+  <text x="797" y="105" font-size="11" text-anchor="middle" fill="#555">vector bucket · 3 indexes (one per chunker)</text>
+  <text x="797" y="120" font-size="11" text-anchor="middle" fill="#555">put_vectors with metadata (product, doc, text)</text>
+
+  <line x1="180" y1="101" x2="215" y2="101" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="415" y1="101" x2="450" y2="101" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="620" y1="101" x2="655" y2="101" stroke="#232f3e" marker-end="url(#a)"/>
+
+  <text x="20" y="182" font-size="12" font-weight="bold" fill="#555">QUERY (every request) — §4</text>
+  <rect x="20" y="210" width="160" height="70" rx="6" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="100" y="236" font-size="13" text-anchor="middle" font-weight="bold">Question</text>
+  <text x="100" y="254" font-size="11" text-anchor="middle" fill="#555">+ the customer's product</text>
+
+  <rect x="215" y="196" width="200" height="44" rx="6" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="315" y="214" font-size="12" text-anchor="middle" font-weight="bold">vector search</text>
+  <text x="315" y="230" font-size="11" text-anchor="middle" fill="#555">query_vectors + product filter</text>
+  <rect x="215" y="252" width="200" height="44" rx="6" fill="#fff" stroke="#0073bb"/>
+  <text x="315" y="270" font-size="12" text-anchor="middle" font-weight="bold">BM25 keyword search</text>
+  <text x="315" y="286" font-size="11" text-anchor="middle" fill="#555">in Python, same chunks</text>
+
+  <rect x="450" y="210" width="170" height="70" rx="6" fill="#fff" stroke="#232f3e"/>
+  <text x="535" y="234" font-size="13" text-anchor="middle" font-weight="bold">RRF fusion</text>
+  <text x="535" y="251" font-size="11" text-anchor="middle" fill="#555">Σ 1 / (60 + rank)</text>
+  <text x="535" y="266" font-size="11" text-anchor="middle" fill="#555">→ 20 candidates</text>
+
+  <rect x="655" y="210" width="140" height="70" rx="6" fill="#232f3e"/>
+  <text x="725" y="236" font-size="13" text-anchor="middle" fill="#fff" font-weight="bold">Cohere Rerank 3.5</text>
+  <text x="725" y="253" font-size="11" text-anchor="middle" fill="#fff">bedrock-agent-runtime</text>
+  <text x="725" y="267" font-size="11" text-anchor="middle" fill="#fff">rerank · paced to quota</text>
+
+  <rect x="830" y="210" width="110" height="70" rx="6" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="885" y="240" font-size="13" text-anchor="middle" font-weight="bold" fill="#1d8102">top 5</text>
+  <text x="885" y="257" font-size="11" text-anchor="middle" fill="#555">to the model</text>
+
+  <line x1="180" y1="232" x2="215" y2="220" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="180" y1="258" x2="215" y2="272" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="415" y1="220" x2="450" y2="236" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="415" y1="272" x2="450" y2="256" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="620" y1="245" x2="655" y2="245" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="795" y1="245" x2="830" y2="245" stroke="#232f3e" marker-end="url(#a)"/>
+  <polyline points="700,136 700,166 315,166 315,196" fill="none" stroke="#232f3e" stroke-dasharray="4,3" marker-end="url(#a)"/>
+  <text x="508" y="160" font-size="10" text-anchor="middle" fill="#555">nearest neighbours from the index</text>
+
+  <rect x="20" y="318" width="920" height="64" rx="10" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="35" y="342" font-size="13" font-weight="bold" fill="#1d8102">§3–§5 Measure every variant</text>
+  <text x="35" y="366" font-size="12" fill="#333">22-question golden set graded by phrase → Hit@1/5 · MRR · nDCG@5 · paired bootstrap CI vs vector search · p50/p95 ms · $ per 1k queries</text>
+</svg>

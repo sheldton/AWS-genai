@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 320" font-family="Helvetica, Arial, sans-serif">
+  <rect width="960" height="320" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232f3e"/></marker></defs>
+  <text x="20" y="28" font-size="17" font-weight="bold" fill="#232f3e">§5 Semantic cache lookup — scope first, then similarity</text>
+  <rect x="20" y="110" width="130" height="56" rx="8" fill="#f1f8fd" stroke="#0073bb"/>
+  <text x="85" y="134" font-size="13" text-anchor="middle">question</text><text x="85" y="151" font-size="11" text-anchor="middle" fill="#555">from the customer</text>
+  <rect x="190" y="55" width="190" height="56" rx="8" fill="#232f3e"/>
+  <text x="285" y="79" font-size="13" text-anchor="middle" fill="#fff">Titan Embeddings V2</text><text x="285" y="96" font-size="11" text-anchor="middle" fill="#ddd">1,024 dims, normalized</text>
+  <rect x="190" y="165" width="190" height="56" rx="8" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="285" y="189" font-size="13" text-anchor="middle">scope key</text><text x="285" y="206" font-size="11" text-anchor="middle" fill="#555">(tenant, doc version, entities)</text>
+  <rect x="420" y="110" width="170" height="56" rx="8" fill="#fff" stroke="#232f3e"/>
+  <text x="505" y="134" font-size="13" text-anchor="middle">entries with the</text><text x="505" y="151" font-size="13" text-anchor="middle">same key only</text>
+  <polygon points="690,93 770,138 690,183 610,138" fill="#fff" stroke="#232f3e"/>
+  <text x="690" y="135" font-size="12" text-anchor="middle">max cosine</text><text x="690" y="150" font-size="12" text-anchor="middle">≥ threshold?</text>
+  <rect x="800" y="45" width="140" height="62" rx="8" fill="#e8f5e3" stroke="#1d8102"/>
+  <text x="870" y="68" font-size="13" text-anchor="middle" fill="#1d8102" font-weight="bold">hit</text><text x="870" y="84" font-size="11" text-anchor="middle">serve stored answer</text><text x="870" y="99" font-size="11" text-anchor="middle">no model call</text>
+  <rect x="800" y="170" width="140" height="62" rx="8" fill="#fdecea" stroke="#d13212"/>
+  <text x="870" y="193" font-size="13" text-anchor="middle" fill="#d13212" font-weight="bold">miss</text><text x="870" y="209" font-size="11" text-anchor="middle">Nova Lite + cachePoint</text><text x="870" y="224" font-size="11" text-anchor="middle">then store it</text>
+  <line x1="150" y1="128" x2="190" y2="92" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="150" y1="150" x2="190" y2="185" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="380" y1="92" x2="420" y2="125" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="380" y1="192" x2="420" y2="152" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="590" y1="138" x2="610" y2="138" stroke="#232f3e" marker-end="url(#a)"/>
+  <line x1="740" y1="122" x2="800" y2="80" stroke="#1d8102" marker-end="url(#a)"/><text x="760" y="92" font-size="11" fill="#1d8102">yes</text>
+  <line x1="740" y1="154" x2="800" y2="196" stroke="#d13212" marker-end="url(#a)"/><text x="752" y="190" font-size="11" fill="#d13212">no</text>
+  <path d="M870,232 L870,252 L505,252 L505,166" fill="none" stroke="#d13212" stroke-dasharray="4 3" marker-end="url(#a)"/>
+  <text x="690" y="246" font-size="11" text-anchor="middle" fill="#d13212">put(vector, key, answer)</text>
+  <rect x="20" y="268" width="920" height="42" rx="8" fill="#fff7ec" stroke="#ff9900"/>
+  <text x="480" y="286" font-size="12" text-anchor="middle">"Is my stolen <tspan font-weight="bold">bike</tspan> covered?" vs "Is my stolen <tspan font-weight="bold">car</tspan> covered?" — close vectors, different scope keys → never a hit.</text>
+  <text x="480" y="302" font-size="12" text-anchor="middle">The key cuts wrong hits, so the similarity threshold can go lower and more true paraphrases hit.</text>
+</svg>

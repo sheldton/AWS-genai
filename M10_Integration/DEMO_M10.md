@@ -7,12 +7,16 @@
 
 Notebook: [`../notebooks/M10_enterprise_genai_api.ipynb`](../notebooks/M10_enterprise_genai_api.ipynb) · Template: [`../src/m10_api.yaml`](../src/m10_api.yaml)
 
+> **Reading the notebook.** Lines worth slowing down for carry a `# ▶ KEY` comment, and every section uses the same boxes: 💡 Concept (the idea before the code), 🔑 Key code (where to look), 📊 How to read this (after the output) and ✅ Takeaway (what to remember). A Summary table at the end recaps what you built.
+
 ## What you will learn
 - How to read **one CloudFormation template** as the architecture of a production-shaped GenAI API: API Gateway with a JSON-schema **request validator** and JSON **gateway responses** (a 429 carries `Retry-After`), a **usage plan** per tenant, a synchronous route (`/ask`) and an asynchronous one (`/jobs`), SQS with a **dead-letter queue**, a worker Lambda whose **maximum concurrency** you choose, and DynamoDB for jobs and a token ledger — 36 resources in a single file.
 - The **three tiers of rate limiting**, each measured: requests per tenant at the edge (a usage-plan token bucket answers 429 before any code runs), tokens per tenant in the application (a DynamoDB ledger answers 429 with `Retry-After`), and concurrency at the model (the queue absorbs the burst; Little's law predicts how fast it drains).
 - **Async request-reply** done properly: 202 + `Location`, an **idempotency key** so a client retry does not create a second job, an idempotent worker for at-least-once delivery, error classification in the worker, and a poison message that ends up in the DLQ instead of blocking the queue.
 - Every tenant as a **cost line**: an **application inference profile** per tenant with its own tags and its own CloudWatch metrics, and a reconciliation of the application's ledger with the platform's metrics.
 - **One ABAC role for all developers**: a session tag decides which profile they may call, an explicit deny enforces the company guardrail, and the IAM policy simulator onboards a new tenant without any policy change.
+
+![M10 at a glance: §1 the template, §2 async request-reply, §3 fair share at the edge, §4 tenants and ABAC](../assets/diagrams/m10_overview.svg)
 
 ## Before you start
 1. **Environment.** From the repository root, once: `./setup_env.sh` (creates `.venv` and the Jupyter kernel), then `.venv/bin/jupyter lab notebooks/` and open the notebook with the kernel **MLAIDP (Python 3.12)**. See [`../README.md`](../README.md).
@@ -27,10 +31,17 @@ All resources are named `mlaidp2-m10-…` and tagged `Project=mlaidp2-demo`.
 
 ### §0 Setup and Prep
 **What the code does:** prints your account (masked), Region and a run id; creates or adopts the stack (≈ 2 min the first time); then polls both API keys until no node returns 403.
+
+- **Key code to read:** in `deploy_stack`, a stack whose first create failed is deleted and started again (it cannot be updated), an update changes only what differs ("no updates" means the stack is adopted as it is), and the waiter raises if the stack ends in a failure state; the `OUT` line, because generated ids (URL, ARNs, queue URLs) come only from the stack Outputs; and in `call_api_patiently`, a 4xx/5xx is kept as a response with its headers, a short `Retry-After` becomes the floor of an exponential backoff with jitter, and a long one (a budget's "come back tomorrow") goes straight back to the caller.
+
 **Expect:** `stack mlaidp2-m10-api: create complete in 125–135 s`, the API URL (`https://<id>.execute-api.us-east-1.amazonaws.com/v1`), then lines like `API keys 9/10 still 403 (52 s)` counting down to `API keys ready after 60–95 s`. On a second run: adopted in about a second, keys ready at once.
 
 ### §1 The template is the architecture (slides 7–9, 30–31)
 **What the code does:** lists the stack's resources by type, prints the template blocks that carry design decisions (the `Question` model, the `THROTTLED` gateway response, the bronze usage plan, the worker's event-source mapping), asks one synchronous question per tenant on `/ask`, then sends five probe requests.
+
+![The path of one request through the stack](../assets/diagrams/m10_architecture.svg)
+
+- **Key code to read:** in the printed YAML, `additionalProperties: false` and `maximum: 400` in the `Question` model, `Retry-After` in the throttled gateway response, `RateLimit` / `BurstLimit` in the bronze usage plan and `MaximumConcurrency: 2` on the worker's event source mapping — each a design decision in a few lines; and in the probe cell, the `x-amzn-ErrorType` header, set by API Gateway itself — the proof that no Lambda and no model ran.
 
 **What to look for:**
 - **One file is the review unit.** The request schema, the error responses, the per-tenant throttle and the worker's concurrency are each a few lines of YAML — design decisions you can diff in a pull request.
@@ -44,6 +55,8 @@ All resources are named `mlaidp2-m10-…` and tagged `Project=mlaidp2-demo`.
 
 ### §2 Async request-reply — the queue absorbs the burst (slides 8, 13, 32)
 **What the code does:** submits a nightly batch (40 renewal letters for gold, 6 for bronze) to `POST /jobs`; retries one request with the same idempotency key; lets bronze ask for gold's job; prints the worker's `process` function and sends a deliberately unparseable message straight to the queue; watches the queue drain; plots it; applies Little's law; checks the DLQ.
+
+- **Key code to read:** `POST /jobs` answers 202 plus `Location` without waiting for the model; `IDEM` is generated once per *intent* and sent on both the first call and the retry; the `spy` call shows that another tenant's job id looks exactly like one that does not exist (404, not 403); the poison message sent straight to the queue with a wrong field name; in the worker code, `if job["status"] == "DONE": return` (an idempotent consumer) and `raise` versus `FAILED`; in the drain watcher, the two approximate SQS counters (waiting vs in flight) next to `batch_get_item` on the job table, the source of truth (at most 100 keys per call); `lam = len(done_items) / DRAIN_S` and `W = c / λ` — Little's law in two lines; and the DLQ read with long polling and `AttributeNames=All`, which shows `ApproximateReceiveCount`.
 
 **What to look for:**
 - **202 + `Location` in ≈ 0.3 s** instead of ≈ 1.2 s synchronously. The model is not in the request path, so a burst costs queue depth, not timeouts.
@@ -63,6 +76,10 @@ If the DLQ cell prints "✗ not in the DLQ after 120 s", the redelivery just too
 ### §3 Tier 1 — fair share at the edge (slides 31–32)
 **What the code does:** for 10 seconds, bronze's client polls its status URL with 10 threads and gold's with 4 (the classic tight-polling anti-pattern), then prints one 429 response with its headers.
 
+![Three tiers of rate limiting: requests at the edge, tokens in the ledger, concurrency at the queue](../assets/diagrams/m10_rate_tiers.svg)
+
+- **Key code to read:** in `storm`, the polled job id does not exist, so a 404 means "passed the edge" and a 429 means "stopped at the edge". In the result table, read *Plan rps*, *Offered rps* and *Reached our code rps* in that order.
+
 **What to look for:**
 - A usage plan is a **token bucket per API key**: rate = refill per second, burst = bucket size. Bronze: rate 1, burst 2. Gold: rate 20, burst 40.
 - Bronze usually gets through at **several** requests per second although its plan says 1: enforcement is per API Gateway node and best effort. Compare the accepted rate with the plan, not with zero. It is a fairness mechanism — the money guarantee lives in tier 2.
@@ -74,6 +91,10 @@ If the DLQ cell prints "✗ not in the DLQ after 120 s", the redelivery just too
 
 ### §4 Tenants as cost lines, developers by attributes (slides 22, 25–28, 32)
 **What the code does:** lists the two application inference profiles; shows the token ledger, then sets gold's daily budget to what it has used, posts a job, and deletes the budget item; prints the ABAC role's policy statements; assumes that role with session tags and tries eight actions; asks the IAM policy simulator four questions about a tenant `silver` that does not exist yet; reconciles the ledger with the profiles' CloudWatch metrics.
+
+![ABAC: one role, the tags decide](../assets/diagrams/m10_abac.svg)
+
+- **Key code to read:** `list_tags_for_resource` on each profile — the tags are both the bill (`CostCenter`) and the access rule (`Tenant`); the budget as data: `put_item` sets gold's budget to what it has used, `delete_item` restores the default, no deploy either way; in `as_tenant`, `assume_role(..., Tags=...)`, whose session tag becomes `aws:PrincipalTag/Tenant` on every request made with those credentials; in `attempt`, the split between "explicit deny" and "no allow"; in `simulate`, the `ContextEntries` that supply the resource tag, so the policy can be evaluated for a profile that does not exist yet; and in `cloudwatch_tokens`, the `ModelId` dimension, which is the application profile id — per-tenant metrics for free.
 
 **What to look for:**
 - An **application inference profile** copies a cross-Region system profile but has its own ARN and tags (`Tenant`, `CostCenter`). Cost Explorer can split the bill by those tags once they are activated as cost-allocation tags in the Billing console (account level — the notebook does not do that).
@@ -88,6 +109,27 @@ If the DLQ cell prints "✗ not in the DLQ after 120 s", the redelivery just too
 If the first matrix row is DENY right after a fresh stack, IAM is still propagating — run the matrix again after 15 s. If reconciliation reports that CloudWatch has not caught up, run the cell again; it only waits.
 
 **Think about it:** The ABAC policy has no tenant name in it. Who in your organisation must own the `Tenant` tag on people and on profiles — and what stops a developer from tagging themselves into another tenant? Are "tokens outside the API" a leak, a feature, or both?
+
+## Going deeper
+- **The order of checks at the front door.** For a REST API with API keys, API Gateway checks the key and its usage plan first (a missing or unknown key gives 403), then the plan's throttle and quota (429), then the request validator (400). All three answers come from API Gateway itself, carry `x-amzn-ErrorType` and never reach the integration.
+- **Usage-plan throttling is best effort.** Rate and burst act as a token bucket per key, but across a distributed fleet, and AWS describes them as targets rather than hard ceilings. That is why bronze gets through at a few requests per second in §3 — and why limits that involve money (tier 2) have to be enforced in your own code.
+- **Fair queues.** Sending to an SQS *standard* queue with a `MessageGroupId` enables fair-queue behaviour: when one group (tenant) builds up a backlog, SQS keeps the dwell time of the other groups low. Delivery stays at-least-once and unordered — this is not a FIFO queue.
+- **`MaximumConcurrency` vs reserved concurrency.** `ScalingConfig.MaximumConcurrency` on the event source mapping (minimum 2) caps how many concurrent invocations this queue drives, without throttling the function. Reserved concurrency caps the function as a whole, so throttled invocations can push messages back to the queue, where they count towards `maxReceiveCount`.
+- **Visibility timeout and `maxReceiveCount`.** Set the visibility timeout to at least the function timeout (AWS recommends six times for Lambda triggers, to leave room for retries); `maxReceiveCount` is the number of attempts before a message moves to the DLQ. With 20 s and 2 in this stack, a poison message lands in the DLQ in about a minute.
+- **One call, two authorization checks.** A call through an application inference profile is authorized against the profile ARN *and* against the foundation model or system profile it routes to. The second check carries `bedrock:InferenceProfileArn`, which is how the policy can allow a model "only through an application profile".
+- **Cost-allocation tags.** Profile tags appear in Cost Explorer and the Cost and Usage Report only after someone activates them as cost-allocation tags in the payer account's Billing console — and only for usage after activation.
+
+## Questions to check your understanding
+1. **Why API keys rather than IAM authentication?**
+   <details><summary>Answer</summary>API keys identify and meter a tenant; they are not proof of identity, and they travel in a header. In production you combine them with an authorizer (IAM SigV4, Cognito, or a Lambda authorizer that maps a token to the tenant's key via `apiKeySource: AUTHORIZER`) and rotate them.</details>
+2. **Why not call the model synchronously with a longer timeout?**
+   <details><summary>Answer</summary>The REST API integration timeout (29 s by default) and the client's patience are fixed; a burst would turn into timeouts and model throttling. The queue converts the burst into waiting time that you control and can measure.</details>
+3. **Could Bedrock enforce the per-tenant token budget itself?**
+   <details><summary>Answer</summary>No. Bedrock quotas are per account and model (tokens and requests per minute), not per tenant per day. A per-tenant budget is application logic — hence the ledger.</details>
+4. **Can a developer with the ABAC role reach another tenant's data?**
+   <details><summary>Answer</summary>Not through the models: they can call only profiles tagged with their own tenant, and always with the guardrail. Data stores (S3, DynamoDB) need the same tag conditions on their own resources.</details>
+5. **What happens to queued jobs when the stack is deleted?**
+   <details><summary>Answer</summary>The queue, the tables and the DLQ are deleted with the stack. In production, set `DeletionPolicy: Retain` on stateful resources.</details>
 
 ## Part 2 — the same in the console (≈ 15 min)
 This part uses the notebook's stack. **Run every cell above *Cleanup* first** (≈ 5½ min on a fresh account) — **don't use Run All**, which ends by deleting the stack. Running §2–§4 once fills the tables, the queue metrics and the profile metrics. Region: us-east-1.

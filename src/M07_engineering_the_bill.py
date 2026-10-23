@@ -21,6 +21,16 @@
 #
 # > **Resources:** CloudWatch dashboard `mlaidp2-m07-cost-latency` (created in §6, used in Part 2 — console). Nothing
 # > else: every other step only calls models. No §0 Prep needed.
+#
+# ![M07 at a glance: one lever per factor of the bill - §5 requests, §2 tokens per request, §1 and §3 price per token; §4 latency; §6 the bill, quotas and dashboard](../assets/diagrams/m07_overview.svg)
+#
+# **How to read this notebook**
+# | Marker | Meaning |
+# |---|---|
+# | 💡 **Concept** | the idea behind the next cells, in a few lines |
+# | 🔑 **Key code** | the lines worth reading closely; in the code they are marked `# ▶ KEY` |
+# | 📊 **How to read this** | what the output means and what to look for |
+# | ✅ **Takeaway** | the one thing to remember from a section |
 
 # %% [markdown]
 # ## §0 Setup
@@ -50,6 +60,11 @@ mean = lambda xs: sum(xs) / len(xs)
 # the home and motor policy wordings, the claims manual and a library of approved answers — and then one customer
 # question. One measured call function for the whole page: **ConverseStream** for time to first token (TTFT), the
 # final `metadata` event for token usage, the price table for dollars.
+#
+# > 💡 **Concept — where the input tokens come from.** A support question is a dozen words; the request around it is
+# > thousands of tokens of context *you* assembled (instructions, documents, examples). On a request like this the
+# > question is well under 1 % of the input bill. That is why the biggest levers act on the context — cache it (§1),
+# > trim it (§2), or skip the call entirely (§5) — and why the price per token (§3) multiplies all of it.
 
 # %%
 DOCS = "\n\n".join(p.read_text() for p in [m.ASSETS / "m03_docs/home_policy_wording_HP-2026.txt",
@@ -75,6 +90,15 @@ QUESTIONS = ["What is the deductible if my window breaks?", "How long do I have 
 SHORT = "\n\nAnswer in at most 60 words."
 print(f"static prefix: {len(PREFIX):,} characters · {len(QUESTIONS)} customer questions")
 
+# %% [markdown]
+# > 🔑 **Key code** — `converse_measured` is used by every section, so read it once:
+# > - `kw["serviceTier"] = {"type": tier}` — the service tier is a **per-request** field of Converse (§4).
+# > - the first `contentBlockDelta` with text = **TTFT**; the `metadata` event at the end of the stream = `usage`
+# >   (`inputTokens`, `outputTokens`, and `cacheReadInputTokens` / `cacheWriteInputTokens` when a cache is involved)
+# >   plus the tier that actually served the request.
+# > - `missing = … not usage.get("totalTokens")` — a guard: a stream can finish with a complete answer and an all-zero
+# >   usage block; `billed()` keeps those rows out of every token and dollar average.
+
 # %%
 def converse_measured(model_id: str, messages, *, system=None, max_tokens: int = 200, tier: str | None = None,
                       client=None) -> dict:
@@ -84,6 +108,7 @@ def converse_measured(model_id: str, messages, *, system=None, max_tokens: int =
     if system:
         kw["system"] = system
     if tier:
+        # ▶ KEY: the service tier is chosen per request
         kw["serviceTier"] = {"type": tier}
     t0 = time.perf_counter()
     resp = (client or bedrock).converse_stream(**kw)
@@ -91,11 +116,14 @@ def converse_measured(model_id: str, messages, *, system=None, max_tokens: int =
     for event in resp["stream"]:
         delta = event.get("contentBlockDelta", {}).get("delta", {})
         if "text" in delta:
+            # ▶ KEY: the first text delta = time to first token
             ttft = ttft or (time.perf_counter() - t0) * 1000
             parts.append(delta["text"])
         if "metadata" in event:
+            # ▶ KEY: usage (incl. cache read/write tokens) and the tier that served the call arrive in the last event
             usage, served = event["metadata"]["usage"], event["metadata"].get("serviceTier", {}).get("type")
     text = re.sub(r"<thinking>.*?</thinking>\s*", "", "".join(parts), flags=re.S).strip()
+    # ▶ KEY: a complete answer with an all-zero usage block - keep it out of the cost averages
     missing = bool(text) and not usage.get("totalTokens")      # seen in testing: a stream whose usage block is all zeros
     USAGE_MISSING.append(missing)
     return {"text": text, "ttft_ms": ttft, "latency_ms": (time.perf_counter() - t0) * 1000, "usage": usage,
@@ -114,17 +142,37 @@ print(f"the question is {len(QUESTIONS[0].split())} words; the request is {r['us
 print(r["text"])
 
 # %% [markdown]
+# > 📊 **How to read this** — compare the two numbers on the second line: the words in the question and the input
+# > tokens of the request. The difference is the static prefix, paid on every single call. The `usage` dict is the
+# > bill's raw material; the dollar figure is `usage` × the price table in `common/mlaidp.py`.
+
+# %% [markdown]
 # ## 1 · Price per input token: prompt caching
 # A `cachePoint` block after the static prefix tells Bedrock to keep the processed prefix for a few minutes. Later
 # requests that start with the **identical** prefix read it from the cache — on Nova at a quarter of the input price,
 # and the cache write costs nothing extra. First the failure modes nobody prints: **where does caching silently do
 # nothing?** The same call twice, with prefixes of five sizes.
+#
+# ![What a cachePoint does to one request: first call writes, later calls read; silent misses](../assets/diagrams/m07_prompt_cache.svg)
+#
+# > 💡 **Concept — prompt caching on Amazon Bedrock.** A `{"cachePoint": {"type": "default"}}` block marks the end of
+# > a prefix (in `system`, `messages` or `tools`). Bedrock stores the model's processed state for everything *before*
+# > the marker; a later request whose prefix matches **byte for byte** reuses it for a few minutes (the timer restarts
+# > on every hit). The usage block reports the split: `cacheWriteInputTokens`, `cacheReadInputTokens`, and
+# > `inputTokens` for the uncached rest. Each model has its own limits (minimum tokens per checkpoint, maximum
+# > cacheable prefix, number of checkpoints) — and outside them the call does not fail, it just isn't cached.
+#
+# > 🔑 **Key code** — in `cache_probe`, the `system` list ends with the `cachePoint` block; the same `kw` is sent twice,
+# > so the second call *should* read what the first wrote. The verdict is taken from the second call's
+# > `cacheReadInputTokens`, never from the answer text.
 
 # %%
 def cache_probe(prefix_text: str) -> dict:
+    # ▶ KEY: everything before the cachePoint block is the cacheable prefix
     kw = {"modelId": LITE_REGIONAL, "system": [{"text": prefix_text}, {"cachePoint": {"type": "default"}}],
           "messages": [{"role": "user", "content": [{"text": "Reply with OK."}]}], "inferenceConfig": {"maxTokens": 5}}
     u1 = bedrock.converse(**kw)["usage"]          # writes the cache
+    # ▶ KEY: the identical request again - its usage block says whether the cache was read
     u2 = bedrock.converse(**kw)["usage"]          # should read it
     prefix_tokens = u1["inputTokens"] + u1.get("cacheWriteInputTokens", 0) + u1.get("cacheReadInputTokens", 0)
     return {"prefix tokens": prefix_tokens, "1st call: written": u1.get("cacheWriteInputTokens", 0),
@@ -145,18 +193,33 @@ print(f"✓ the workload's prefix is cached; silently uncached: {', '.join(uncac
 # `cachePoint`: above the model's maximum cacheable prefix (and, on models that have one, below the minimum) the call
 # succeeds, the usage block shows zero cache tokens — and you pay full price without an error. Check the usage block
 # in your tests, not just the answer.
+#
+# > 📊 **How to read this** — one row per prefix size. *prefix tokens* is the size; *1st call: written* and *2nd call:
+# > read from cache* should both be ≈ the prefix size when caching works; *billed at full price* should then be a
+# > handful of tokens (the question). A row with 0 written, 0 read and the whole prefix billed is the silent miss —
+# > note where it starts, and check that the workload's own prefix ("full prefix") is well inside the working range.
 
 # %% [markdown]
 # Now the workload: the twelve questions on four arms — the expensive baseline (Nova Pro, no cache), right-sized (Nova
 # Lite, no cache), Nova Lite with a `cachePoint` on the **in-Region** id, and the same through the **`us.`
 # cross-Region profile** (requests can land in another Region, whose cache is cold). Same inputs, interleaved, four at
 # a time.
+#
+# > 💡 **Concept — in-Region model id vs cross-Region inference profile.** `amazon.nova-lite-v1:0` is served in the
+# > Region you call. `us.amazon.nova-lite-v1:0` is a **system-defined inference profile**: Bedrock may route each
+# > request to us-east-1, us-east-2 or us-west-2 for throughput. The prompt cache lives in the Region that served the
+# > request, so the first request that lands in each Region pays a cache write — the hit rate is something to measure.
+#
+# > 🔑 **Key code** — `ARMS` maps each arm to *(model id, system blocks)*: the two cached arms differ **only** in the
+# > model id. The warm-up loop writes each cache once before the measured calls; `arm_summary` takes token and dollar
+# > averages from `billed(rs)` only, but latency from every row.
 
 # %%
 NO_CACHE = [{"text": PREFIX}]
 CACHED = [{"text": PREFIX}, {"cachePoint": {"type": "default"}}]
 ARMS = {"Nova Pro, no cache": (PRO_REGIONAL, NO_CACHE),
         "Nova Lite, no cache": (LITE_REGIONAL, NO_CACHE),
+        # ▶ KEY: the two cached arms differ only in the model id - in-Region vs the us. cross-Region profile
         "Nova Lite, cachePoint, in-Region": (LITE_REGIONAL, CACHED),
         "Nova Lite, cachePoint, us. profile": (m.NOVA_LITE, CACHED)}
 for model_id, system in list(ARMS.values())[2:]:
@@ -172,7 +235,7 @@ with ThreadPoolExecutor(4) as pool:
 
 def arm_summary(arm: str) -> dict:
     rs = [r for r in CACHE_RUNS if r["arm"] == arm]
-    ok = billed(rs)                                   # token and dollar columns from complete usage blocks only
+    ok = billed(rs)                                   # ▶ KEY: token and dollar columns from complete usage blocks only
     hits = [r for r in ok if r["usage"].get("cacheReadInputTokens")]
     return {"arm": arm, "billed input": mean([r["usage"]["inputTokens"] for r in ok]),
             "read from cache": mean([r["usage"].get("cacheReadInputTokens", 0) for r in ok]),
@@ -187,6 +250,12 @@ lost = len(CACHE_RUNS) - len(billed(CACHE_RUNS))
 print(f"streams with an empty usage block: {lost} of {len(CACHE_RUNS)} (left out of the token and $ columns)")
 
 # %% [markdown]
+# > 📊 **How to read this** — one row per arm, the same twelve questions each. Read **$ / 1k requests** top to bottom:
+# > Pro → Lite is the price-per-token lever, Lite → Lite + cache is the caching lever. In the cached rows, *billed
+# > input* should drop to a few dozen tokens while *read from cache* carries the prefix; *cache hits* shows how many
+# > billed streams actually hit (the `us.` row can be lower — a cold Region). TTFT and total p50 are for §1's
+# > latency question below, not for the cost story.
+#
 # Read the last line: if any stream came back with an **empty usage block** (all zeros) although the answer was
 # complete, a cost tracker that sums client-side usage under-counts. CloudWatch `InputTokenCount` (§6) and invocation
 # logs (Module 8) are the billing truth.
@@ -194,6 +263,12 @@ print(f"streams with an empty usage block: {lost} of {len(CACHE_RUNS)} (left out
 # **Does the cache also buy latency?** Twelve TTFTs per arm are noisy, so don't compare two medians by eye: bootstrap
 # the difference of the medians and look at its 95 % interval. If the interval contains 0, this data cannot claim a
 # latency gain.
+#
+# > 💡 **Concept — the bootstrap.** We have one sample of twelve TTFTs per arm and no formula for the uncertainty of a
+# > difference of medians. The bootstrap fakes "running the experiment again" by resampling each arm *with
+# > replacement* thousands of times and recomputing the statistic each time; the middle 95 % of those values is the
+# > confidence interval. An interval that straddles 0 means: a gain, a loss and no difference are all consistent with
+# > this data.
 
 # %%
 def bootstrap_ci(stat, n: int, B: int = 4000, seed: int = 7) -> tuple[float, float]:
@@ -207,6 +282,7 @@ def ttfts(arm):
 
 cold, warm = ttfts("Nova Lite, no cache"), ttfts("Nova Lite, cachePoint, in-Region")
 rng = np.random.default_rng(7)                       # two independent samples: resample each arm on its own
+# ▶ KEY: resample each arm with replacement, 4,000 times; the spread of the median difference is the uncertainty
 diffs = [np.median(rng.choice(cold, len(cold))) - np.median(rng.choice(warm, len(warm))) for _ in range(4000)]
 lo, hi = np.percentile(diffs, [2.5, 97.5])
 saving = 1 - CACHE_TABLE[2]["$ / 1k requests"] / CACHE_TABLE[1]["$ / 1k requests"]
@@ -217,6 +293,10 @@ print(f"✓ cost per request with the in-Region cache: {saving:.0%} lower than w
       else f"✗ cache saved only {saving:.0%}")
 
 # %% [markdown]
+# > 📊 **How to read this** — first line: the median TTFT saved (positive = the cache arm is faster) and its 95 %
+# > interval in brackets. Only an interval entirely above 0 supports a latency gain; entirely below 0, a loss; across
+# > 0, "can't tell". The last line is the cost verdict, from the measured $ per request of the two Nova Lite arms.
+#
 # > **Think about it:** A request through the `us.` profile can be served in another Region, whose cache is cold.
 # > When is the `us.` profile still the right choice for a cached workload?
 #
@@ -225,12 +305,22 @@ print(f"✓ cost per request with the in-Region cache: {saving:.0%} lower than w
 # - Your prompt template puts today's date in the first line. What happens to the cache?
 # - Slide 12 says "compress first". With a cached prefix, which part of the prompt would you compress first?
 # </details>
+#
+# > ✅ **Takeaway §1** — A `cachePoint` on a large, byte-identical prefix is the cheapest cost lever there is — but
+# > verify it in the usage block (a prefix outside the model's limits is silently uncached), and on Nova treat it as a
+# > cost lever, not a latency one, unless your own bootstrap interval says otherwise.
 
 # %% [markdown]
 # ## 2 · Tokens per request: long conversations
 # Converse is stateless: every turn resends the whole history, so a 30-turn chat pays for turn 1 thirty times
 # (slide 13).
 # Four strategies on the same chat; at turn 30 the customer asks for the policy number they gave **once**, in turn 2.
+#
+# > 💡 **Concept — why chat cost grows quadratically.** The Converse API keeps no session: the client sends the whole
+# > `messages` list every turn. If each turn adds *k* tokens, turn *n* costs about *n·k* input tokens and a chat of *N*
+# > turns about *k·N²/2*. Compaction caps what is resent: a **sliding window** keeps the last few turns (cheap, but
+# > forgets), a **summary** compresses the older turns with a small model (costs a call, may drop details), and
+# > **pinned turns** keep older turns that carry identifiers or amounts verbatim (free, but only as good as its rule).
 
 # %%
 CHAT = ["Hi, I need help with a claim.", "My policy number is HP-2291, home insurance.",
@@ -269,6 +359,12 @@ def history(first: int, last: int) -> list:
     return msgs
 print(f"{len(CHAT)} customer turns; the policy number appears in turn 2 only")
 
+# %% [markdown]
+# > 🔑 **Key code** — `strategies(n)` returns four *(system prompt, messages, extra $)* tuples for the request at turn
+# > *n*. The window is just `history(n - WINDOW, n)`; the two compacting strategies keep that window and put what came
+# > before it into the **system prompt**: `summarize()` (a Nova Micro call, its cost added as extra $) or `pinned()`
+# > (the `ID_PATTERN` regex, no model call).
+
 # %%
 CHAT_SYSTEM = "You are AnyCompany Insurance's claims assistant. Be brief."
 WINDOW = 8
@@ -285,11 +381,12 @@ def summarize(n: int) -> str:
 def pinned(n: int) -> str:
     """Slide 13's importance markers: customer turns before the window that contain an identifier or an amount are
     kept verbatim (a regex - no model call)."""
+    # ▶ KEY: keep every older customer turn that contains an identifier or an amount - verbatim, no model call
     return "\n".join(f"Customer (turn {i + 1}): {CHAT[i]}" for i in range(n - WINDOW) if ID_PATTERN.search(CHAT[i]))
 
 def strategies(n: int) -> dict:
     full = (CHAT_SYSTEM, history(0, n), 0.0)
-    win = (CHAT_SYSTEM, history(max(0, n - WINDOW), n), 0.0)
+    win = (CHAT_SYSTEM, history(max(0, n - WINDOW), n), 0.0)       # ▶ KEY: the sliding window - only the last turns
     summary, su = summarize(n)
     return {"full history": full, f"last {WINDOW} turns": win,
             f"last {WINDOW} + summary": (CHAT_SYSTEM + f"\nEarlier in this chat: {summary}", win[1],
@@ -324,6 +421,11 @@ for name in dict.fromkeys(r["strategy"] for r in COMPACT):
 m.table(rows, fmt={"whole chat": "{:,}"})
 
 # %% [markdown]
+# > 📊 **How to read this** — one row per strategy. *input @ turn 10/20/30* shows the growth: linear for full history,
+# > flat for the three windowed strategies. *whole chat* is the input tokens summed over all 30 turns (interpolated
+# > between the three measured turns) — the number that drives the bill. Then the quality check: *remembers HP-2291*
+# > and the actual answer at turn 30. A ✗ with a confident, made-up number is the dangerous case.
+#
 # > **Think about it:** If the window lost the policy number, did it say "I don't have that information" or invent
 # > one — which is the worse failure? Which of the two compacting strategies would you trust with a claim amount?
 #
@@ -332,6 +434,9 @@ m.table(rows, fmt={"whole chat": "{:,}"})
 # - The pinned-turns regex costs nothing. What does it miss that the summary catches?
 # - AgentCore Memory (Module 5) does this as a service. What would you still measure yourself?
 # </details>
+#
+# > ✅ **Takeaway §2** — Every chat turn resends the history, so cap it — but measure compaction on *recall* as well as
+# > tokens: a window that silently forgets an identifier is cheaper and wrong.
 
 # %% [markdown]
 # ## 3 · Price per token, safely: a model cascade
@@ -340,6 +445,14 @@ m.table(rows, fmt={"whole chat": "{:,}"})
 # check; every task goes **once** to Nova Micro (cheap), Nova Lite (cheap, a different model), Nova 2 Lite with
 # reasoning on (strong, slide 15's adjustable reasoning) and gpt-oss-120b (reference) — every arm below is computed
 # from the same calls.
+#
+# ![The agreement cascade: Micro and Lite answer, equal values are served, disagreement escalates to Nova 2 Lite](../assets/diagrams/m07_cascade.svg)
+#
+# > 💡 **Concept — a cascade needs a signal that predicts mistakes.** Sending everything to a cheap model saves money
+# > and loses accuracy; a cascade tries to keep both by escalating only the tasks the cheap model probably got wrong.
+# > Everything hinges on that "probably". Two candidates: the model's **self-reported confidence** (free, one field in
+# > the answer) and **agreement** between two *different* cheap models (costs a second cheap call). A good signal is
+# > low exactly when the answer is wrong; the section measures which one is.
 
 # %%
 POLICY = ("AnyCompany Insurance - Home policy HP-2291 (summary). Deductible: 500 USD per claim. The policy pays "
@@ -397,6 +510,14 @@ print(f"{len(TASKS)} tasks:", dict(__import__("collections").Counter(t[1] for t 
 # The cheap models answer through a **forced tool call** (Nova's way to structured output): the answer plus a
 # self-reported confidence. Graders normalize every answer to a comparable value — that is also what "two models
 # agree" means.
+#
+# > 🔑 **Key code**
+# > - `"toolChoice": {"tool": {"name": "submit_answer"}}` — the model *must* call this tool, so the answer arrives as
+# >   JSON matching `inputSchema` (`answer` + `confidence`) instead of free text.
+# > - in `ask_strong`, reasoning for Nova 2 Lite is switched on through `additionalModelRequestFields`
+# >   (`reasoningConfig`, effort `low`) with a large `maxTokens`: reasoning tokens are billed as output tokens.
+# > - `normalize()` turns every answer into a label, an integer or a `(policy_number, date)` tuple — the grader and
+# >   the agreement test compare these values, not raw text.
 
 # %%
 ANSWER_TOOL = {"tools": [{"toolSpec": {
@@ -404,7 +525,7 @@ ANSWER_TOOL = {"tools": [{"toolSpec": {
     "inputSchema": {"json": {"type": "object", "required": ["answer", "confidence"], "properties": {
         "answer": {"type": "string", "description": "the answer, exactly in the requested format"},
         "confidence": {"type": "number", "description": "probability between 0 and 1 that the answer is correct"}}}}}}],
-    "toolChoice": {"tool": {"name": "submit_answer"}}}
+    "toolChoice": {"tool": {"name": "submit_answer"}}}     # ▶ KEY: forced tool use = structured answer + confidence
 
 def ask_cheap(model_id: str, prompt: str) -> dict:
     t0 = time.perf_counter()
@@ -422,6 +543,7 @@ REASONING = {"reasoningConfig": {"type": "enabled", "maxReasoningEffort": "low"}
 def ask_strong(model_id: str, prompt: str) -> dict:
     t0 = time.perf_counter()
     if model_id == m.NOVA2_LITE:
+        # ▶ KEY: reasoning on, via a model-specific field; room for the (billed) reasoning tokens
         extra = {"additionalModelRequestFields": REASONING, "inferenceConfig": {"maxTokens": 8000}}
     else:
         extra = {"inferenceConfig": {"maxTokens": 2000, "temperature": 0}}
@@ -441,6 +563,11 @@ def normalize(checker: str, text: str):
     if not isinstance(j, dict):
         return None
     return str(j.get("policy_number", "")).strip().upper(), str(j.get("incident_date", "")).strip()
+
+# %% [markdown]
+# Every task goes once to each of the four models; every policy below is scored from these same answers.
+#
+# > ⏱️ This cell prints nothing for about 30–45 s (96 calls, four tasks at a time; reasoning calls are the slow ones).
 
 # %%
 def run_task(task):
@@ -464,11 +591,20 @@ m.table([{"task": r["task"],
           "micro conf": r["micro"]["conf"]} for r in CASCADE], fmt={"micro conf": "{:.2f}"})
 
 # %% [markdown]
+# > 📊 **How to read this** — one row per task (C = classify, E = extract, M = math, R = reasoning), one column per
+# > model: ✓/✗ and the normalized value. Look for patterns by task kind first (which kinds does Nova Micro miss?), then
+# > at the *micro conf* column next to the ✗ rows — if the confidence is just as high on the wrong answers as on the
+# > right ones, self-reported confidence cannot drive escalation.
+#
 # Policies on the same answers. *Escalate* means: pay for the strong model (Nova 2 Lite, reasoning) too, and use its
 # answer.
 # - **self-confidence:** escalate when Nova Micro reports confidence below 0.9;
 # - **agreement:** ask Nova Micro *and* Nova Lite; escalate when their normalized answers differ (or one is
 #   unparseable).
+#
+# > 🔑 **Key code** — `policy_result` replays the recorded answers: if `escalate(r)` is true the task costs the cheap
+# > call(s) **plus** the strong call and takes the strong answer; otherwise it costs only the cheap call(s). The
+# > agreement policy always pays for *two* cheap calls (`cheap_cost` adds Lite) — that is the price of the signal.
 
 # %%
 def policy_result(name: str, escalate=None, only: str | None = None) -> dict:
@@ -478,6 +614,7 @@ def policy_result(name: str, escalate=None, only: str | None = None) -> dict:
     ok, usd, esc = [], [], 0
     for r in CASCADE:
         cheap_cost = r["micro"]["usd"] + (r["lite"]["usd"] if "agreement" in name else 0)
+        # ▶ KEY: escalated = cheap call(s) + strong call, strong answer; otherwise the cheap answer
         if escalate(r):
             esc += 1; ok.append(r["strong"]["ok"]); usd.append(cheap_cost + r["strong"]["usd"])
         else:
@@ -492,6 +629,7 @@ def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
 POLICIES = [policy_result("Nova Micro only", only="micro"),
             policy_result("Nova 2 Lite (reasoning) only", only="strong"),
             policy_result("cascade: self-confidence < 0.9", lambda r: r["micro"]["conf"] < 0.9),
+            # ▶ KEY: the agreement signal - escalate when the two cheap models' normalized answers differ
             policy_result("cascade: agreement Micro = Lite",
                           lambda r: r["micro"]["value"] is None or r["micro"]["value"] != r["lite"]["value"]),
             policy_result("reference: gpt-oss-120b only", only="gpt-oss")]
@@ -504,9 +642,21 @@ for p in POLICIES:
 m.table(rows, fmt={"$ / 1k tasks": "${:.3f}"})
 
 # %% [markdown]
+# > 📊 **How to read this** — one row per policy. Compare each row with "Nova 2 Lite (reasoning) only": *correct* with
+# > its **95 % CI** (overlapping intervals = not distinguishable on 24 tasks), *escalated* (how often the strong model
+# > was paid for as well) and **$ / 1k tasks**. A cascade that escalates nothing behaves exactly like the cheap model;
+# > one that escalates everything costs more than the strong model alone. The reference row is there to keep the
+# > comparison honest.
+#
 # **Is the confidence signal any good?** Calibration in two numbers: how often is Nova Micro right when it says it is
 # sure, and when it is not? Then the paired bootstrap: the accuracy difference of the agreement cascade vs the strong
 # model, and the cost ratio, with 95 % intervals.
+#
+# > 💡 **Concept — calibration and a paired bootstrap.** A signal is *calibrated* if "90 % sure" is right about 90 % of
+# > the time; the first two lines check that by splitting tasks on the reported confidence. The comparison with the
+# > strong model is **paired** — both policies answered the same 24 tasks — so `bootstrap_ci` resamples *task indices*
+# > and applies the same indices to both arrays. That keeps easy and hard tasks together and gives a narrower, honest
+# > interval for the difference.
 
 # %%
 sure = [r["micro"]["ok"] for r in CASCADE if r["micro"]["conf"] >= 0.9]
@@ -520,12 +670,25 @@ print(f"Micro and Lite agree: {len(agree)} tasks, {sum(agree)} right "
 casc, strong = POLICIES[3], POLICIES[1]
 a_ok, s_ok = np.array(casc["ok"], float), np.array(strong["ok"], float)
 a_usd, s_usd = np.array(casc["usd"]), np.array(strong["usd"])
+# ▶ KEY: paired - the same resampled task indices i for both policies
 lo, hi = bootstrap_ci(lambda i: a_ok[i].mean() - s_ok[i].mean(), len(TASKS))
 clo, chi = bootstrap_ci(lambda i: a_usd[i].sum() / s_usd[i].sum(), len(TASKS))
 print(f"accuracy cascade − strong: {a_ok.mean() - s_ok.mean():+.0%}  95 % CI [{lo:+.0%}, {hi:+.0%}]")
 print(f"cost cascade / strong:     {a_usd.sum() / s_usd.sum():.0%}   95 % CI [{clo:.0%}, {chi:.0%}]")
 print("✓ the agreement cascade is cheaper than the strong model with no accuracy loss this data can detect"
       if chi < 1 and lo > -0.15 else "✗ the cascade is not a safe saving on this task set - look at the escalations")
+
+# %% [markdown]
+# > 📊 **How to read this** — line 1–2: calibration. If nearly every task lands in "≥ 0.9" whatever its outcome, the
+# > confidence carries no information. The agreement line is the precision of "both cheap models agree" as a signal for
+# > "the answer is right". Lines 3–4: the accuracy difference (cascade − strong) and the cost ratio (cascade ÷ strong),
+# > each with a 95 % interval — a saving is safe when the cost interval stays below 100 % *and* the accuracy interval
+# > does not reach far below 0.
+#
+# > 💡 **Concept — break-even.** Per task the cascade pays the cheap call(s) every time and the strong model on a
+# > fraction *e* of tasks: `c_cheap + e · c_strong`. That is below `c_strong` only while `c_strong > c_cheap / (1 − e)`.
+# > A high escalation rate or an already-cheap strong model wipes the saving out — then the right move is to use the
+# > cheaper accurate model directly.
 
 # %%
 # break-even: a cascade pays only while c_cheap + e × c_strong < c_strong, i.e. c_strong > c_cheap / (1 − e)
@@ -547,12 +710,26 @@ print(f"break-even: with {e:.0%} escalations the strong model must cost > ${c_ch
 # - Replace "agreement" with a deterministic validator (JSON schema, a date parser, the deductible formula). Which tasks
 #   could you verify in code instead of with a second model?
 # </details>
+#
+# > ✅ **Takeaway §3** — Right-sizing is only a saving when a measured signal catches the cheap model's mistakes:
+# > check the calibration lines before trusting self-reported confidence; agreement of two different models is a
+# > signal you can measure — and the break-even line tells you whether
+# > the cascade beats simply choosing a better-priced model.
 
 # %% [markdown]
 # ## 4 · Latency: what the user waits for
 # Two numbers, two different levers. **TTFT** is mostly prefill (input length, cache, queueing); **total latency** is
 # TTFT plus output tokens ÷ generation speed. Streaming doesn't make the answer faster — it shows the first words after
 # TTFT instead of after the total. The same request asking for four answer lengths, twice each:
+#
+# > 💡 **Concept — prefill and decode.** A model first processes the whole input in parallel (*prefill*) and then
+# > generates output one token at a time (*decode*). TTFT ≈ queueing + prefill, so it depends on the input, not on how
+# > long the answer will be. Total latency ≈ TTFT + output tokens ÷ decode speed. A straight-line fit of total latency
+# > against output tokens therefore gives the decode speed as 1 ÷ slope — the number to quote as "tokens per second".
+#
+# > 🔑 **Key code** — `np.polyfit(out_tok, total_ms, 1)` fits *total = intercept + slope × output tokens*; R² says how
+# > much of the variation output length explains. Rows with an empty usage block are skipped (`if r["usage_ok"]`)
+# > because the fit needs the output token count.
 
 # %%
 LAT = []
@@ -564,7 +741,7 @@ for words in (20, 80, 200, 400):
             LAT.append({"words asked": words, "output tokens": r["usage"]["outputTokens"], "TTFT ms": r["ttft_ms"],
                         "total ms": r["latency_ms"]})
 out_tok, ttft_ms, total_ms = (np.array([x[k] for x in LAT]) for k in ("output tokens", "TTFT ms", "total ms"))
-slope, intercept = np.polyfit(out_tok, total_ms, 1)                 # total ≈ intercept + slope × output tokens
+slope, intercept = np.polyfit(out_tok, total_ms, 1)                 # ▶ KEY: total ≈ intercept + slope × output tokens
 r2 = np.corrcoef(out_tok, total_ms)[0, 1] ** 2
 m.table(LAT, fmt={"TTFT ms": "{:.0f}", "total ms": "{:.0f}"})
 print(f"total ≈ {intercept:.0f} ms + {slope:.2f} ms × output tokens  (R² {r2:.2f}) "
@@ -586,10 +763,25 @@ ax.set_title(f"Every output token adds ~{slope:.1f} ms to the total; "
 plt.tight_layout(); plt.show()
 
 # %% [markdown]
+# > 📊 **How to read this** — table and chart show the same eight calls. Blue dots (total latency) climb along the
+# > dashed fit line as the answer gets longer; orange dots (TTFT) stay in a narrow band whatever the length. The printed
+# > fit gives the fixed cost (intercept, ms) and the cost per output token (slope, ms); 1000 ÷ slope is the decode speed.
+# > An R² close to 1 means output length explains almost all of the total latency.
+#
 # ### Service tiers: price and latency per request
 # `serviceTier` is a request parameter (slide 10): **priority** for the customer-facing chat under load, **standard**
 # (`default` in the API), **flex** (about half price) for work that can wait. Not every model has tiers — the request
 # then fails with a `ValidationException`, so a client that sets tiers needs a fallback. First the probe:
+#
+# > 💡 **Concept — service tiers.** The tier is chosen per request (`serviceTier={"type": "priority" | "default" |
+# > "flex"}`) on the same on-demand model id — no provisioned capacity, no separate endpoint. The
+# > stream's `metadata` reports the tier that actually served the call, and CloudWatch has `ServiceTier` and
+# > `ResolvedServiceTier` dimensions to compare requested and served tiers. Priority costs more for preferential
+# > processing when capacity is contended; flex costs less and may be slower when it is.
+#
+# > 🔑 **Key code** — `converse_tiered` catches exactly one error: a `ValidationException` whose message says the
+# > tier is not supported, and retries **without** a tier. Every other error is re-raised — a fallback must never
+# > hide throttling or a bug.
 
 # %%
 def converse_tiered(model_id: str, prompt: str, tier: str) -> tuple[dict, str]:
@@ -597,6 +789,7 @@ def converse_tiered(model_id: str, prompt: str, tier: str) -> tuple[dict, str]:
     try:
         return converse_measured(model_id, prompt, tier=tier, max_tokens=100, client=bare), tier
     except ClientError as e:
+        # ▶ KEY: only "tier not supported" falls back to the default tier; anything else is a real error
         if m.error_code(e) == "ValidationException" and "service tier is not supported" in str(e):
             return converse_measured(model_id, prompt, max_tokens=100), "default (fallback)"
         raise
@@ -606,6 +799,13 @@ for model_id in (m.NOVA_MICRO, m.NOVA_LITE, m.NOVA2_LITE, m.NOVA_PRO, m.GPT_OSS_
     r, used = converse_tiered(model_id, QUESTIONS[1] + SHORT, "flex")
     PROBE.append({"model": m.model_name(model_id), "asked": "flex", "used": used, "response says": r["tier"] or "–"})
 m.table(PROBE)
+
+# %% [markdown]
+# > 📊 **How to read this** — *used* says whether the request kept the tier or fell back; *response says* is the tier
+# > reported in the stream's metadata (– when no tier was sent). The next cell compares the three tiers on a model that
+# > supports them, with the same six questions interleaved.
+#
+# > ⏱️ The next cell prints nothing for about 15 s (18 calls, one after the other).
 
 # %%
 TIERS = ("priority", "default", "flex")
@@ -623,6 +823,11 @@ ratio = rows[2]["$ / 1k requests"] / rows[1]["$ / 1k requests"]
 print(f"✓ flex costs {ratio:.0%} of default for the same requests" if ratio < 0.6 else f"✗ flex/default = {ratio:.0%}")
 
 # %% [markdown]
+# > 📊 **How to read this** — one row per tier, six questions each. *served as* must match the tier asked for. Read
+# > **$ / 1k requests** first (the price difference is deterministic: same tokens, different rate), then the latency
+# > columns: on an idle account the tiers often look alike — six samples cannot separate differences of a few hundred
+# > milliseconds, and priority only pays off when capacity is contended.
+#
 # > **Think about it:** Compare the priority and default latencies. What does priority buy you, and when would the
 # > table show it?
 #
@@ -631,6 +836,9 @@ print(f"✓ flex costs {ratio:.0%} of default for the same requests" if ratio < 
 # - Which of AnyCompany's workloads go to flex: nightly claim summaries, the chat, the fraud pre-check?
 # - Your router (slide 17) sets model *and* tier per request. What should it do when the monthly budget hits 90 %?
 # </details>
+#
+# > ✅ **Takeaway §4** — Shorter answers cut total latency and cost; streaming cuts *perceived* latency to TTFT; the
+# > service tier is a per-request price/priority choice — with a fallback for models that do not offer it.
 
 # %% [markdown]
 # ## 5 · Number of requests: a semantic cache
@@ -638,6 +846,17 @@ print(f"✓ flex costs {ratio:.0%} of default for the same requests" if ratio < 
 # and serves a stored answer when a new question means **nearly the same**. The threshold is a correctness
 # decision, so measure it like a classifier. 54 questions in 12 answer groups: each group has a question and two
 # paraphrases (same answer); plus 12 look-alikes with a *different* answer and 6 unrelated questions.
+#
+# ![Semantic cache lookup: embed and scope the question, compare only within the same scope, hit above the threshold](../assets/diagrams/m07_semantic_cache.svg)
+#
+# > 💡 **Concept — embeddings and cosine similarity.** An embedding model maps a text to a vector (here 1,024
+# > numbers) so that texts with similar meaning point in similar directions. Cosine similarity measures that angle:
+# > 1 = same direction, around 0 = unrelated. With `normalize: True` every vector has length 1, so cosine is a plain
+# > dot product. The catch: "similar meaning" is not "same answer" — *stolen bike* and *stolen car* are close vectors
+# > with different answers, so the threshold trades wrong hits (precision) against missed hits (recall).
+#
+# > 🔑 **Key code** — `embed_one` calls `InvokeModel` on Titan Text Embeddings V2 with `dimensions` and `normalize`
+# > in the request body; the two `pool.map` calls embed the 12 cached questions and the 42 probes, four at a time.
 
 # %%
 CACHE_SET = [  # (cached question, [two paraphrases], look-alike with a different answer)
@@ -685,7 +904,7 @@ PROBES = ([(p, g) for g, (_, paras, _) in enumerate(CACHE_SET) for p in paras] +
           [(look, None) for _, _, look in CACHE_SET] + [(u, None) for u in UNRELATED])
 
 def embed_one(text: str) -> np.ndarray:
-    body = json.dumps({"inputText": text, "dimensions": 1024, "normalize": True})   # normalized → dot product = cosine
+    body = json.dumps({"inputText": text, "dimensions": 1024, "normalize": True})   # ▶ KEY: normalized → dot product = cosine
     return np.array(json.loads(bedrock.invoke_model(modelId=m.TITAN_EMBED_V2, body=body)["body"].read())["embedding"])
 
 with ThreadPoolExecutor(4) as pool:
@@ -698,6 +917,15 @@ print(f"{len(BASE_VEC)} cached + {len(PROBE_VEC)} probe embeddings, {BASE_VEC.sh
 # perils, insured objects and actions of the product catalogue (the policy wording's own terms: *escape of water*,
 # *flood*, *glass*…). Here a small vocabulary maps words to those entities; in production they come from your NER or
 # slot filler.
+#
+# > 💡 **Concept — a scope key is an exact-match filter in front of the similarity search.** Two questions may only
+# > share an answer if they are about the same tenant, the same document version and the same insured object or
+# > action. Checking that exactly (a tuple comparison) removes the look-alikes that embeddings cannot tell apart, so the
+# > similarity threshold can be lowered and more true paraphrases hit. It also makes invalidation easy: a new document
+# > version is a new key, and old entries can no longer match.
+#
+# > 🔑 **Key code** — `scope()` returns `(tenant, doc_version, frozenset(entities))`; the generic words *claim* and
+# > *policy* are removed from the set because almost every question contains them and they would separate nothing.
 
 # %%
 ENTITIES = {"glass": r"window|glass|pane", "roof": r"roof", "pipe": r"pipe", "flood": r"flood|river",
@@ -710,8 +938,15 @@ ENTITIES = {"glass": r"window|glass|pane", "roof": r"roof", "pipe": r"pipe", "fl
             "claim": r"\bclaim\b", "policy": r"\bpolicy\b"}
 
 def scope(question: str, tenant: str = "anycompany", doc_version: str = "HP-2026") -> tuple:
+    # ▶ KEY: the entities found in the question, minus the generic ones, are part of the cache key
     found = frozenset(e for e, rx in ENTITIES.items() if re.search(rx, question, re.I)) - {"claim", "policy"}
     return (tenant, doc_version, found)          # generic words don't scope; the insured object / action does
+
+# %% [markdown]
+# > 🔑 **Key code** — the evaluation unit is a **pair of questions**: `np.triu_indices` lists every unordered pair once,
+# > `VECS @ VECS.T` gives all cosines in one matrix product, and `same_answer` / `same_scope` are the ground truth and
+# > the scope filter for each pair. The table below shows the three closest pairs with *different* answers and the three
+# > most distant pairs with the *same* answer — the two ends of the threshold problem.
 
 # %%
 # Any answered question becomes a cache key - so evaluate PAIRS of questions, not just probes against a seed set.
@@ -719,6 +954,7 @@ ALL_Q = [c[0] for c in CACHE_SET] + [p for p, _ in PROBES]
 GROUP = list(range(len(CACHE_SET))) + [g if g is not None else f"other-{i}" for i, (_, g) in enumerate(PROBES)]
 VECS = np.vstack([BASE_VEC, PROBE_VEC])
 iu = np.triu_indices(len(ALL_Q), 1)                       # every unordered pair once
+# ▶ KEY: all pairwise cosines in one matrix product (vectors are normalized)
 pair_sim = (VECS @ VECS.T)[iu]
 same_answer = np.array([GROUP[i] == GROUP[j] for i, j in zip(*iu)])
 same_scope = np.array([scope(ALL_Q[i]) == scope(ALL_Q[j]) for i, j in zip(*iu)])
@@ -729,12 +965,24 @@ far_right = [p for p in pairs if p[1]][-3:]                        # paraphrases
 m.table([{"pair": f"{ALL_Q[i]}  |  {ALL_Q[j]}", "cosine": float(sim), "same answer?": "yes" if same else "NO"}
          for sim, same, i, j in close_wrong + far_right], fmt={"cosine": "{:.2f}"})
 
+# %% [markdown]
+# > 📊 **How to read this** — compare the cosines of the "NO" rows (different answers) with the "yes" rows (same
+# > answer). If some different-answer pairs score *higher* than some same-answer pairs, no single threshold separates
+# > them perfectly: any threshold that catches those paraphrases also serves those look-alikes. Embeddings are
+# > deterministic, so this table is the same on every run.
+#
+# The sweep: for each threshold, the pairs that would be a hit — with vector-only keys and with scoped keys.
+#
+# > 🔑 **Key code** — `hit = (pair_sim >= t) & allowed`: vector-only keys allow every pair, scoped keys only the pairs
+# > with the same scope. *precision* = hits that share an answer ÷ all hits; *recall* = hits that share an answer ÷ all
+# > pairs that share an answer.
+
 # %%
 
 SWEEP = []
 for keys, allowed in (("vector only", np.ones_like(same_scope)), ("scoped", same_scope)):
     for t in np.round(np.arange(0.50, 0.96, 0.05), 2):
-        hit = (pair_sim >= t) & allowed
+        hit = (pair_sim >= t) & allowed                       # ▶ KEY: a hit = similar enough AND in the same scope
         right = int((hit & same_answer).sum())
         SWEEP.append({"keys": keys, "threshold": t, "pairs that hit": int(hit.sum()), "right": right,
                       "wrong answers served": int(hit.sum()) - right,
@@ -742,9 +990,16 @@ for keys, allowed in (("vector only", np.ones_like(same_scope)), ("scoped", same
 m.table([s for s in SWEEP if s["threshold"] in (0.5, 0.6, 0.7, 0.8, 0.9)],
         fmt={"precision": "{:.0%}", "recall": "{:.0%}", "threshold": "{:.2f}"})
 
+# %% [markdown]
+# > 📊 **How to read this** — two blocks of rows (vector only, scoped), thresholds rising. The column that matters for
+# > customers is **wrong answers served**: find the lowest threshold where it is 0 in each block, then compare the
+# > **recall** at that point — that is how many repeat questions the cache can absorb safely. At the same threshold the
+# > scoped block never serves more wrong answers than the vector-only block, because it only removes hits.
+
 # %%
 def best_threshold(keys: str, min_precision: float = 1.0):
     """The lowest threshold that never served a wrong answer on this set = most hits at zero wrong answers."""
+    # ▶ KEY: the operating point = the lowest threshold whose precision meets the bar (default: no wrong answer at all)
     ok = [s for s in SWEEP if s["keys"] == keys and s["precision"] >= min_precision]
     return min(ok, key=lambda s: s["threshold"]) if ok else None
 
@@ -765,11 +1020,21 @@ print(f"vector only: threshold {V['threshold']:.2f} → recall {V['recall']:.0%}
       f"scoped: threshold {S['threshold']:.2f} → recall {S['recall']:.0%}")
 
 # %% [markdown]
+# > 📊 **How to read this** — a precision/recall curve per key type; each dot is a threshold (labels on every other
+# > dot), lower thresholds to the right. The goal is the top-right corner: every hit right, every repeat caught. Follow
+# > each curve along the 100 % precision line — the right-most dot there is the threshold the cache will use. A curve
+# > that stays higher further to the right is the better key design.
+#
 # ### Replay: real traffic through the cache
 # The cache starts empty. The 54 questions arrive in random order; a miss calls Nova Lite (with the cached prompt prefix
 # from §1) and stores the answer; a hit serves the stored answer, with the scoped keys and the threshold chosen above.
 # The threshold was tuned on these same questions, so the replay shows hit rate, latency and cost — not how the
 # threshold generalizes (that needs a held-out set from real traffic).
+#
+# > 🔑 **Key code** — `SemanticCache.get` sets the similarity of every entry with a **different key** to −1 before
+# > taking the best match, so the scope check happens before the threshold. In the replay loop a hit `continue`s
+# > without a model call; a miss calls Nova Lite (with the §1 `cachePoint` prefix) and `put`s the answer under the
+# > question's vector and key.
 
 # %%
 class SemanticCache:
@@ -780,12 +1045,17 @@ class SemanticCache:
     def get(self, vec, key):
         if not self.entries:
             return None, 0.0
+        # ▶ KEY: entries with another scope key can never win (-1); then the threshold decides
         sims = np.where([e["key"] == key for e in self.entries], self.vecs @ vec, -1.0)
         i = int(np.argmax(sims))
         return (self.entries[i] if sims[i] >= self.threshold else None), float(sims[i])
     def put(self, vec, key, question, answer, group):
         self.vecs = np.vstack([self.vecs, vec])
         self.entries.append({"key": key, "q": question, "a": answer, "group": group})
+
+# %% [markdown]
+# > ⏱️ This cell prints nothing for about 30–40 s (54 requests one after the other: an embedding each, a model call on
+# > every miss).
 
 # %%
 TRAFFIC = [(c[0], g) for g, c in enumerate(CACHE_SET)] + [(p, g) for p, g in PROBES]
@@ -798,7 +1068,7 @@ for q, group in TRAFFIC:
     t0 = time.perf_counter()
     vec = embed_one(q)                                   # re-embedded: the replay pays the real embedding latency
     entry, sim = sc.get(vec, scope(q))
-    if entry:
+    if entry:                                            # ▶ KEY: a hit - the stored answer, no model call
         REPLAY.append({"q": q, "hit": True, "right": entry["group"] == group, "ms": (time.perf_counter() - t0) * 1000})
         continue
     r = converse_measured(LITE_REGIONAL, q + SHORT, system=CACHED, max_tokens=150)
@@ -822,6 +1092,10 @@ print("✓ no wrong answer served" if all(r["right"] for r in hits) else "✗ th
       "; ".join(r["q"] for r in hits if not r["right"]))
 
 # %% [markdown]
+# > 📊 **How to read this** — line 1: hit rate and, most important, **wrong answers served** (it must be 0). Line 2:
+# > the latency of a hit (one embedding call) vs a miss (embedding + model call). Line 3: $ per 1,000 requests with
+# > and without the cache — the saving is the hit rate × the model cost, minus the embedding that every request pays.
+#
 # > **Think about it:** The threshold was tuned on 54 questions. What happens on the first day a customer asks about
 # > something the vocabulary doesn't know — and what would you monitor to catch it?
 #
@@ -830,17 +1104,25 @@ print("✓ no wrong answer served" if all(r["right"] for r in hits) else "✗ th
 # - Which answers must never be cached at all (slide 40)?
 # - The policy wording changes on 1 January. How does the scope key make invalidation one line of code?
 # </details>
+#
+# > ✅ **Takeaway §5** — A semantic cache is a classifier: tune its threshold on pairs for zero wrong answers, put
+# > exact-match scope keys in front of the similarity, and re-check it on held-out traffic before you trust the hit rate.
 
 # %% [markdown]
 # ## 6 · The bill, the quota and the dashboard
 # A monthly waterfall for the support assistant from the numbers measured above (per-request dollars from §1, hit rate
 # from §5). Assumption: `MONTHLY_REQUESTS` requests a month.
+#
+# > 🔑 **Key code** — `STEPS` applies the levers cumulatively to the *measured* dollars per request: the §1 arms for
+# > the first three steps, then `× (1 − HIT_RATE) + embed_usd` for the semantic cache (only misses reach the model, but
+# > every request pays for one embedding).
 
 # %%
 per_req = {r["arm"]: r["$ / 1k requests"] / 1000 for r in CACHE_TABLE}
 STEPS = [("baseline: Nova Pro", per_req["Nova Pro, no cache"]),
          ("right-size: Nova Lite", per_req["Nova Lite, no cache"]),
          ("+ prompt cache (in-Region)", per_req["Nova Lite, cachePoint, in-Region"]),
+         # ▶ KEY: only misses reach the model; every request pays one embedding
          (f"+ semantic cache ({HIT_RATE:.0%} hits)",
           per_req["Nova Lite, cachePoint, in-Region"] * (1 - HIT_RATE) + embed_usd)]
 WATERFALL = [{"step": s, "$ / month": MONTHLY_REQUESTS * usd, "vs baseline": usd / STEPS[0][1]} for s, usd in STEPS]
@@ -856,15 +1138,29 @@ ax.set_title(f"Three levers take the bill to {WATERFALL[-1]['vs baseline']:.0%} 
 plt.tight_layout(); plt.show()
 
 # %% [markdown]
+# > 📊 **How to read this** — each row is the bill after one more lever, cumulative. *vs baseline* is the share of the
+# > Nova Pro bill that is left. The bars are on a linear scale, so the first step usually dominates the picture — and it
+# > is the one lever that changes the model, which is why it needs §3's quality evidence before it ships.
+#
 # **Will it fit?** Throughput is capped by per-model quotas in requests *and* tokens per minute (slide 28). Read the
 # account's applied values from **Service Quotas** (the AWS default where nothing is applied) and check the peak.
+#
+# > 💡 **Concept — Bedrock quotas.** On-demand inference is limited per model and per Region in **requests per
+# > minute** (RPM) and **tokens per minute** (TPM); cross-Region inference profiles have their own, separate quotas.
+# > Service Quotas knows two values: the **AWS default** (`ListAWSDefaultServiceQuotas`) and the value **applied** to
+# > this account (`GetServiceQuota`), which can be lower (new or restricted accounts) or higher (approved increases).
+# > Capacity planning compares the *peak* minute, not the monthly average, with the applied value.
+#
+# > 🔑 **Key code** — `find_quotas` pages through `list_aws_default_service_quotas` with `NextToken` (Bedrock has
+# > hundreds of quotas), matches by exact quota name, then asks `get_service_quota` for the applied value — falling back
+# > to the default when nothing is applied.
 
 # %%
 def find_quotas(words: list[str]) -> dict:
     """Quota codes by name, paginated (NextToken), then the value applied to THIS account."""
     found, kw = {}, {"ServiceCode": "bedrock", "MaxResults": 100}
     while True:
-        page = quotas.list_aws_default_service_quotas(**kw)
+        page = quotas.list_aws_default_service_quotas(**kw)          # ▶ KEY: paginated - follow NextToken
         for q in page["Quotas"]:
             if q["QuotaName"] in words:
                 found[q["QuotaName"]] = {"code": q["QuotaCode"], "default": q["Value"]}
@@ -873,6 +1169,7 @@ def find_quotas(words: list[str]) -> dict:
         kw["NextToken"] = page["NextToken"]
     for name, q in found.items():
         try:
+            # ▶ KEY: the value applied to THIS account can differ from the AWS default
             q["applied"] = quotas.get_service_quota(ServiceCode="bedrock", QuotaCode=q["code"])["Quota"]["Value"]
         except ClientError:
             q["applied"] = q["default"]
@@ -883,7 +1180,7 @@ Q = find_quotas(["On-demand model inference requests per minute for Amazon Nova 
                  "On-demand model inference tokens per minute for Amazon Nova Lite",
                  "Cross-region model inference requests per minute for Amazon Nova Lite"])
 PEAK_FACTOR = 10                         # peak minute = 10 × the average minute (support desks are spiky)
-peak_rpm = MONTHLY_REQUESTS * (1 - HIT_RATE) / (30 * 24 * 60) * PEAK_FACTOR
+peak_rpm = MONTHLY_REQUESTS * (1 - HIT_RATE) / (30 * 24 * 60) * PEAK_FACTOR   # ▶ KEY: only cache misses use quota
 tokens_per_req = mean([r["usage"]["inputTokens"] + r["usage"].get("cacheReadInputTokens", 0) + r["usage"]["outputTokens"]
                        for r in billed(CACHE_RUNS) if r["arm"] == "Nova Lite, cachePoint, in-Region"])
 need = {"requests per minute": peak_rpm, "tokens per minute": peak_rpm * tokens_per_req}
@@ -898,9 +1195,19 @@ print(f"peak uses {peak_rpm / rpm_q:.0%} of this account's on-demand RPM quota; 
       "or a queue (Module 10)")
 
 # %% [markdown]
+# > 📊 **How to read this** — one row per quota: *AWS default*, the value applied to *this account*, and the *peak
+# > need* of the workload (peak minute = 10 × the average minute, after the semantic cache's hits). Peak need close to
+# > or above *this account* is the warning; the printed line gives the monthly volume at which the on-demand RPM quota
+# > runs out and the three ways past it.
+#
 # **Watch it in production.** Bedrock publishes per-model metrics to CloudWatch, including `TimeToFirstToken`,
 # `CacheReadInputTokenCount` and the per-tier dimensions. A dashboard for the models this notebook used — the console
 # part opens it. (The account is shared: other traffic shows up too.)
+#
+# > 🔑 **Key code** — a dashboard is one JSON document: `metric()` builds a metric row
+# > `["AWS/Bedrock", name, "ModelId", id, …dimensions, {"stat": …}]`, `widget()` wraps rows in a time-series widget,
+# > and `put_dashboard` creates or replaces the whole dashboard by name (idempotent). `get_metric_data` then reads one
+# > metric back to show the data has arrived.
 
 # %%
 def metric(name, model_id, stat="Sum", **dims):
@@ -921,7 +1228,7 @@ BODY = {"widgets": [
     widget("Time to first token p50", [metric("TimeToFirstToken", x, "p50") for x in USED], 0, 6),
     widget("Nova 2 Lite latency by service tier p50",
            [metric("InvocationLatency", m.NOVA2_LITE, "p50", ServiceTier=t, ResolvedServiceTier=t) for t in TIERS], 12, 6)]}
-cloudwatch.put_dashboard(DashboardName=DASHBOARD, DashboardBody=json.dumps(BODY))
+cloudwatch.put_dashboard(DashboardName=DASHBOARD, DashboardBody=json.dumps(BODY))   # ▶ KEY: create-or-replace by name
 print(json.dumps(BODY["widgets"][3]["properties"]["metrics"][0]))
 now = time.time()
 data = cloudwatch.get_metric_data(StartTime=now - 1800, EndTime=now, MetricDataQueries=[{"Id": "ttft", "MetricStat": {
@@ -933,6 +1240,21 @@ print(f"dashboard {DASHBOARD}: ✓ created · Nova Lite in-Region invocations in
 
 # %% [markdown]
 # > **Think about it:** Which one CloudWatch metric would you alarm on for this assistant — and on which statistic?
+#
+# > ✅ **Takeaway §6** — Put the measured levers into one monthly number, check the peak minute against the quotas
+# > *applied to your account*, and watch tokens, cache reads and TTFT in CloudWatch — the server-side metrics are the
+# > billing truth.
+#
+# ## Summary — what you built
+# | Piece | AWS API / pattern | Production next step |
+# |---|---|---|
+# | Measured call | `ConverseStream`: TTFT, `metadata.usage`, served tier | reconcile client-side usage with invocation logs (Module 8) |
+# | Prompt cache | `cachePoint` block, `cacheRead/WriteInputTokens`, in-Region vs `us.` profile | assert cache tokens in tests; keep volatile text after the cache point |
+# | History compaction | sliding window + summary (Nova Micro) or pinned turns | managed session memory (AgentCore Memory, Module 5) with a recall test |
+# | Model cascade | forced tool use, agreement signal, reasoning via `additionalModelRequestFields` | deterministic validators as signals; re-run the break-even when prices change |
+# | Latency and tiers | streaming, output-length fit, `serviceTier` with a fallback | route tier per workload; alarm when the resolved tier differs from the requested one |
+# | Semantic cache | Titan Text Embeddings V2, cosine threshold, scoped keys | ElastiCache for Valkey vector search with TTLs, tuned on held-out traffic |
+# | Bill, capacity, monitoring | Service Quotas (default vs applied), CloudWatch `put_dashboard` | alarms on throttles and TPM usage; quota increases before launch |
 
 # %% [markdown]
 # ## Cleanup — don't skip this
